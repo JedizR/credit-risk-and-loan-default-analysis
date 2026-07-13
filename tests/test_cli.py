@@ -5,11 +5,25 @@ import pandas as pd
 import pytest
 
 from credit_risk.cli import build_parser, main
+from credit_risk.data import io
 
 
 def _run(argv: list[str]) -> None:
     args = build_parser().parse_args(argv)
     args.handler(args)
+
+
+def test_prepare_writes_parquet_and_registry(
+    training_csv: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(io, "RAW_CSV", training_csv)
+    monkeypatch.setattr(io, "PROCESSED_PARQUET", tmp_path / "processed" / "applicants.parquet")
+    monkeypatch.setattr(io, "REGISTRY_JSON", tmp_path / "registry.json")
+
+    _run(["prepare"])
+
+    assert (tmp_path / "processed" / "applicants.parquet").exists()
+    assert (tmp_path / "registry.json").exists()
 
 
 def test_train_writes_model_and_metrics(training_csv: Path, tmp_path: Path) -> None:

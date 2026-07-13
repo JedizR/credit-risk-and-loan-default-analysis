@@ -2,7 +2,13 @@ import argparse
 import json
 from pathlib import Path
 
-from credit_risk.data import load_features_to_score, load_training_data
+from credit_risk.data import (
+    PROCESSED_PARQUET,
+    REGISTRY_JSON,
+    load_features_to_score,
+    load_training_data,
+    prepare_dataset,
+)
 from credit_risk.pipeline import DEFAULT_MODEL_NAME, MODEL_BUILDERS
 from credit_risk.train import (
     load_model,
@@ -14,7 +20,6 @@ from credit_risk.train import (
     train_model,
 )
 
-DEFAULT_DATA_PATH = Path("data/loan_risk_prediction_dataset.csv")
 DEFAULT_MODEL_PATH = Path("models/model.joblib")
 DEFAULT_METRICS_PATH = Path("reports/metrics.json")
 DEFAULT_PREDICTIONS_PATH = Path("out/predictions.csv")
@@ -22,6 +27,12 @@ DEFAULT_PREDICTIONS_PATH = Path("out/predictions.csv")
 
 def _report(metrics: dict[str, float]) -> None:
     print(json.dumps(metrics, indent=2))
+
+
+def run_prepare(_args: argparse.Namespace) -> None:
+    frame = prepare_dataset()
+    print(f"Prepared {len(frame)} applicants written to {PROCESSED_PARQUET}")
+    print(f"Provenance written to {REGISTRY_JSON}")
 
 
 def run_train(args: argparse.Namespace) -> None:
@@ -68,8 +79,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
+    prepare = subcommands.add_parser(
+        "prepare", help="Repair and convert the raw CSV to a typed parquet dataset"
+    )
+    prepare.set_defaults(handler=run_prepare)
+
     train = subcommands.add_parser("train", help="Train a model and write it to disk")
-    train.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
+    train.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
     train.add_argument("--model-name", choices=sorted(MODEL_BUILDERS), default=DEFAULT_MODEL_NAME)
     train.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
     train.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
@@ -78,7 +94,9 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate = subcommands.add_parser(
         "evaluate", help="Score a saved model on the held-out applicants"
     )
-    evaluate.add_argument("--data", type=Path, default=DEFAULT_DATA_PATH)
+    evaluate.add_argument(
+        "--data", type=Path, default=None, help="defaults to the prepared dataset"
+    )
     evaluate.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
     evaluate.set_defaults(handler=run_evaluate)
 
