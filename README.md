@@ -4,7 +4,7 @@ Final project for the Practical Machine Learning class. Predicts whether a loan 
 
 ## Dataset
 
-`data/loan_risk_prediction_dataset.csv` — 5,000 applicants, 9 features, binary target `LoanApproved`. See [data/datacard.md](data/datacard.md).
+`data/raw/loan_risk_prediction_dataset.csv` — 5,000 applicants, 9 features, binary target `LoanApproved`. See [data/raw/datacard.md](data/raw/datacard.md). `make prepare` repairs impossible values and writes a typed `data/processed/applicants.parquet` alongside a `data/registry.json` provenance record.
 
 Three properties drive the modelling choices:
 
@@ -54,10 +54,10 @@ Tagging a release on `main` publishes the image to `ghcr.io/jedizr/credit-risk-a
 
 ```
 src/credit_risk/
-  data.py       load CSVs and validate the schema
+  data/         schema, parquet/duckdb io, quality rules and provenance
   pipeline.py   preprocessing and the model registry
   train.py      split, fit, score, persist
-  cli.py        train / evaluate / predict
+  cli.py        prepare / train / evaluate / predict
 tests/          pytest suite behind an 85% coverage gate
 notebooks/      exploratory analysis
 ```

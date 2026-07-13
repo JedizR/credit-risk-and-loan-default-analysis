@@ -1,7 +1,7 @@
-.PHONY: help setup lint test train eval predict docker-build docker-train clean
+.PHONY: help setup lint test prepare train eval predict docker-build docker-train clean
 
 IMAGE := credit-risk
-APPLICANTS := data/loan_risk_prediction_dataset.csv
+APPLICANTS := data/raw/loan_risk_prediction_dataset.csv
 
 help:  ## Show the available targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
@@ -16,6 +16,9 @@ lint:  ## Check style and formatting
 
 test:  ## Run the test suite with coverage
 	uv run pytest
+
+prepare:  ## Repair and convert the raw CSV to a typed parquet dataset
+	uv run credit-risk prepare
 
 train:  ## Train the model and write metrics
 	uv run credit-risk train

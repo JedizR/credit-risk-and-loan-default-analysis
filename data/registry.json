@@ -1,0 +1,8 @@
+{
+  "raw_csv": "data/raw/loan_risk_prediction_dataset.csv",
+  "raw_sha256": "d31f2bc1aeaeeca45b1ad208400a79c68ee0e8475c114ce0edf4f1ae88365d2a",
+  "processed_parquet": "data/processed/applicants.parquet",
+  "processed_sha256": "3350a1698bf5d48306e7e7beb55117e85fbeaf1667367eaa805655321235a8d6",
+  "n_rows": 5000,
+  "n_columns": 10
+}

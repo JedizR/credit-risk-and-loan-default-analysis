@@ -13,7 +13,7 @@ from credit_risk.data.schema import (
 )
 
 DATA_DIR = Path("data")
-RAW_CSV = DATA_DIR / "loan_risk_prediction_dataset.csv"
+RAW_CSV = DATA_DIR / "raw" / "loan_risk_prediction_dataset.csv"
 PROCESSED_PARQUET = DATA_DIR / "processed" / "applicants.parquet"
 REGISTRY_JSON = DATA_DIR / "registry.json"
 
