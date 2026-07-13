@@ -1,0 +1,57 @@
+[project]
+name = "credit-risk"
+version = "0.1.0"
+description = "Credit risk and loan default analysis for the Practical Machine Learning final project"
+readme = "README.md"
+authors = [
+    { name = "Natakorn Wannaboworn", email = "teenday.jedi@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "joblib>=1.5.3",
+    "pandas>=3.0.3",
+    "scikit-learn>=1.9.0",
+]
+
+[project.scripts]
+credit-risk = "credit_risk.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "jupyter>=1.1.1",
+    "matplotlib>=3.11.0",
+    "nbstripout>=0.9.1",
+    "pre-commit>=4.6.0",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.21",
+    "seaborn>=0.13.2",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # import sorting
+    "N",    # pep8 naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+    "PTH",  # use pathlib
+    "RET",  # return values
+    "ARG",  # unused arguments
+    "C4",   # comprehensions
+    "ERA",  # commented-out code
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=credit_risk --cov-report=term-missing --cov-fail-under=85"
