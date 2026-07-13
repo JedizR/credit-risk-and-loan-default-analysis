@@ -34,3 +34,14 @@ jobs:
 
       - name: Test
         run: uv run pytest
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t credit-risk .
+
+      - name: Smoke-test the entry point
+        run: docker run --rm credit-risk --help
