@@ -12,7 +12,12 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
-from sklearn.model_selection import StratifiedKFold, cross_val_score, learning_curve
+from sklearn.model_selection import (
+    StratifiedKFold,
+    cross_val_predict,
+    cross_val_score,
+    learning_curve,
+)
 from sklearn.pipeline import Pipeline
 
 from credit_risk.config import CONFIG
@@ -224,3 +229,27 @@ def plot_model_comparison(scores: pd.DataFrame) -> Figure:
         axis.text(value + 0.005, position, f"{value:.3f}", va="center")
     figure.tight_layout()
     return figure
+
+
+def out_of_fold_probabilities(
+    features: pd.DataFrame,
+    target: pd.Series,
+    model_name: str = DEFAULT_MODEL_NAME,
+    numeric_features: list[str] | None = None,
+    categorical_features: list[str] | None = None,
+    params: dict[str, Any] | None = None,
+) -> np.ndarray:
+    """Predictions for rows the model did not see while fitting.
+
+    In-sample probabilities are overconfident, so a threshold chosen on them lands far too
+    high. Choosing it on out-of-fold predictions keeps the holdout untouched and honest.
+    """
+    model = build_model(model_name, numeric_features, categorical_features, params)
+    return cross_val_predict(
+        model,
+        features,
+        target,
+        cv=cross_validation_folds(),
+        method="predict_proba",
+        n_jobs=-1,
+    )[:, 1]

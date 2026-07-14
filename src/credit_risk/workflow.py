@@ -4,7 +4,6 @@ from typing import Any
 
 import matplotlib
 import pandas as pd
-from sklearn.model_selection import cross_val_predict
 from sklearn.pipeline import Pipeline
 
 matplotlib.use("Agg")
@@ -20,8 +19,8 @@ from credit_risk.error_analysis import (  # noqa: E402
     plot_error_rate_by_segment,
 )
 from credit_risk.evaluation import (  # noqa: E402
-    cross_validation_folds,
     optimal_threshold,
+    out_of_fold_probabilities,
     plot_calibration_curve,
     plot_confusion_matrix,
     plot_learning_curve,
@@ -33,6 +32,7 @@ from credit_risk.explain import (  # noqa: E402
     plot_beeswarm,
     plot_dependence,
     plot_importance_bar,
+    top_features,
 )
 from credit_risk.features.engineering import engineer_features  # noqa: E402
 from credit_risk.features.selection import (  # noqa: E402
@@ -113,14 +113,9 @@ def run_training(
 
     # The threshold is a decision, not a fit: choose it on out-of-fold training predictions so
     # the holdout stays untouched until the final score.
-    out_of_fold = cross_val_predict(
-        build_model(model_name, numeric, categorical, params),
-        train_features,
-        train_target,
-        cv=cross_validation_folds(),
-        method="predict_proba",
-        n_jobs=-1,
-    )[:, 1]
+    out_of_fold = out_of_fold_probabilities(
+        train_features, train_target, model_name, numeric, categorical, params
+    )
     threshold = optimal_threshold(train_target, out_of_fold)
 
     holdout_features = holdout_frame[features]
@@ -177,8 +172,14 @@ def write_figures(
     numeric, categorical = split_feature_types(list(train_features.columns))
     probabilities = model.predict_proba(holdout_features)[:, 1]
     classified = classify_predictions(model, holdout_features, holdout_target, threshold)
-    classified["credit_band"] = holdout_frame["credit_band"]
+    # Selection may have dropped these columns from the model, but the error analysis still
+    # needs them to say *who* the model fails on.
+    for segment in ERROR_SEGMENTS:
+        classified[segment] = holdout_frame[segment]
     explanation = explain_model(model, holdout_features)
+    # Feature selection may drop any given column, so the dependence plot names are derived
+    # from what the fitted model actually uses rather than hard-coded.
+    influential = top_features(explanation, 2)
 
     named_figures = {
         "dynamics_learning_curve": lambda: plot_learning_curve(
@@ -198,9 +199,7 @@ def write_figures(
         "evaluation_threshold_cost": lambda: plot_threshold_cost(holdout_target, probabilities),
         "explain_beeswarm": lambda: plot_beeswarm(explanation),
         "explain_importance": lambda: plot_importance_bar(explanation),
-        "explain_dependence_credit_score": lambda: plot_dependence(
-            explanation, "CreditScore", "is_unemployed"
-        ),
+        "explain_dependence": lambda: plot_dependence(explanation, influential[0], influential[-1]),
         "errors_overview": lambda: plot_error_overview(classified),
         "errors_by_segment": lambda: plot_error_rate_by_segment(classified, ERROR_SEGMENTS),
     }
