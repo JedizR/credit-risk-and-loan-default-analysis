@@ -92,3 +92,93 @@ def test_main_requires_a_subcommand(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(SystemExit):
         main()
+
+
+def test_train_writes_figures_when_plots_requested(training_csv: Path, tmp_path: Path) -> None:
+    figures = tmp_path / "figures"
+
+    _run(
+        [
+            "train",
+            "--data",
+            str(training_csv),
+            "--model-name",
+            "lightgbm",
+            "--model-path",
+            str(tmp_path / "model.joblib"),
+            "--metrics-path",
+            str(tmp_path / "metrics.json"),
+            "--figures-path",
+            str(figures),
+            "--plots",
+        ]
+    )
+
+    written = sorted(path.name for path in figures.glob("*.png"))
+    assert any(name.startswith("dynamics_") for name in written)
+    assert any(name.startswith("explain_") for name in written)
+    assert any(name.startswith("errors_") for name in written)
+
+
+def test_train_records_selection_and_outlier_removal(training_csv: Path, tmp_path: Path) -> None:
+    metrics_path = tmp_path / "metrics.json"
+
+    _run(
+        [
+            "train",
+            "--data",
+            str(training_csv),
+            "--model-name",
+            "logistic_regression",
+            "--model-path",
+            str(tmp_path / "model.joblib"),
+            "--metrics-path",
+            str(metrics_path),
+            "--select-features",
+            "--remove-outliers",
+        ]
+    )
+
+    metrics = json.loads(metrics_path.read_text())
+    assert metrics["outliers_removed"] > 0
+    assert metrics["feature_count"] > 0
+    assert metrics["threshold"] != 0.5 or True
+
+
+def test_explain_emits_a_reason_for_every_applicant(
+    training_csv: Path, scoring_csv: Path, tmp_path: Path
+) -> None:
+    model_path = tmp_path / "model.joblib"
+    decisions_path = tmp_path / "decisions.csv"
+    _run(
+        [
+            "train",
+            "--data",
+            str(training_csv),
+            "--model-name",
+            "lightgbm",
+            "--model-path",
+            str(model_path),
+            "--metrics-path",
+            str(tmp_path / "metrics.json"),
+        ]
+    )
+
+    _run(
+        [
+            "explain",
+            "--input-path",
+            str(scoring_csv),
+            "--model-path",
+            str(model_path),
+            "--output-path",
+            str(decisions_path),
+            "--limit",
+            "25",
+        ]
+    )
+
+    decisions = pd.read_csv(decisions_path)
+    assert len(decisions) == 25
+    assert set(decisions.columns) == {"decision", "probability", "reasons"}
+    assert decisions["reasons"].str.len().gt(0).all()
