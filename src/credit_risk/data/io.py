@@ -4,6 +4,7 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 
+from credit_risk.config import CONFIG
 from credit_risk.data.quality import file_hash, frame_hash, repair_impossible_values
 from credit_risk.data.schema import (
     FEATURE_COLUMNS,
@@ -12,10 +13,9 @@ from credit_risk.data.schema import (
     require_columns,
 )
 
-DATA_DIR = Path("data")
-RAW_CSV = DATA_DIR / "raw" / "loan_risk_prediction_dataset.csv"
-PROCESSED_PARQUET = DATA_DIR / "processed" / "applicants.parquet"
-REGISTRY_JSON = DATA_DIR / "registry.json"
+RAW_CSV = CONFIG.paths.raw_csv
+PROCESSED_PARQUET = CONFIG.paths.processed_parquet
+REGISTRY_JSON = CONFIG.paths.registry_json
 
 
 def read_frame(path: Path) -> pd.DataFrame:

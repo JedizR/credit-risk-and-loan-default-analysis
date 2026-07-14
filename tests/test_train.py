@@ -4,9 +4,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from credit_risk.config import CONFIG
 from credit_risk.data import FEATURE_COLUMNS, TARGET_COLUMN
 from credit_risk.train import (
-    HOLDOUT_FRACTION,
     load_model,
     predict_applicants,
     save_metrics,
@@ -18,6 +18,8 @@ from credit_risk.train import (
 EXPECTED_METRICS = {
     "average_precision",
     "roc_auc",
+    "brier_score",
+    "threshold",
     "precision",
     "recall",
     "f1",
@@ -30,12 +32,12 @@ EXPECTED_METRICS = {
 
 
 def test_split_holdout_preserves_class_balance(sample_frame: pd.DataFrame) -> None:
-    split = split_holdout(sample_frame)
+    split = split_holdout(sample_frame, FEATURE_COLUMNS)
 
     full_approval_rate = sample_frame[TARGET_COLUMN].mean()
     holdout_approval_rate = split.holdout_target.mean()
 
-    assert len(split.holdout_target) == round(len(sample_frame) * HOLDOUT_FRACTION)
+    assert len(split.holdout_target) == round(len(sample_frame) * CONFIG.training.holdout_fraction)
     assert holdout_approval_rate == pytest.approx(full_approval_rate, abs=0.02)
 
 
