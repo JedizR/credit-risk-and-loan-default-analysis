@@ -41,9 +41,12 @@ def cross_validated_score(
     numeric_features: list[str] | None = None,
     categorical_features: list[str] | None = None,
     params: dict[str, Any] | None = None,
+    autoencoder_bottleneck: int | None = None,
 ) -> dict[str, float]:
     """Mean cross-validated PR-AUC. Preprocessing is refit inside every fold, so it cannot leak."""
-    model = build_model(model_name, numeric_features, categorical_features, params)
+    model = build_model(
+        model_name, numeric_features, categorical_features, params, autoencoder_bottleneck
+    )
     scores = cross_val_score(
         model, features, target, scoring=SCORING, cv=cross_validation_folds(), n_jobs=-1
     )

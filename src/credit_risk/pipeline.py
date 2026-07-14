@@ -12,6 +12,7 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from credit_risk.config import CONFIG
 from credit_risk.data.schema import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+from credit_risk.features.autoencoder import AutoencoderFeatures
 
 MISSING_CATEGORY = "Missing"
 
@@ -53,6 +54,7 @@ class UnknownModelError(ValueError):
 def build_preprocessor(
     numeric_features: list[str] | None = None,
     categorical_features: list[str] | None = None,
+    autoencoder_bottleneck: int | None = None,
 ) -> ColumnTransformer:
     numeric_features = NUMERIC_FEATURES if numeric_features is None else numeric_features
     categorical_features = (
@@ -78,6 +80,11 @@ def build_preprocessor(
         transformers.append(("numeric", numeric_steps, numeric_features))
     if categorical_features:
         transformers.append(("categorical", categorical_steps, categorical_features))
+    # The embedding is an extra view of the same numeric columns, not a replacement for them.
+    if autoencoder_bottleneck and numeric_features:
+        transformers.append(
+            ("autoencoder", AutoencoderFeatures(autoencoder_bottleneck), numeric_features)
+        )
     return ColumnTransformer(transformers)
 
 
@@ -86,13 +93,17 @@ def build_model(
     numeric_features: list[str] | None = None,
     categorical_features: list[str] | None = None,
     params: dict[str, Any] | None = None,
+    autoencoder_bottleneck: int | None = None,
 ) -> Pipeline:
     if model_name not in MODEL_BUILDERS:
         raise UnknownModelError(model_name)
 
     return Pipeline(
         [
-            ("preprocess", build_preprocessor(numeric_features, categorical_features)),
+            (
+                "preprocess",
+                build_preprocessor(numeric_features, categorical_features, autoencoder_bottleneck),
+            ),
             ("classifier", MODEL_BUILDERS[model_name](**(params or {}))),
         ]
     )
