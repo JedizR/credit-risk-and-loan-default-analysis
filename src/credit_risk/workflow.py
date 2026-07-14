@@ -203,7 +203,9 @@ def write_figures(
         "evaluation_confusion_matrix": lambda: plot_confusion_matrix(
             model, holdout_features, holdout_target, threshold
         ),
-        "evaluation_threshold_cost": lambda: plot_threshold_cost(holdout_target, probabilities),
+        "evaluation_threshold_cost": lambda: plot_threshold_cost(
+            holdout_target, probabilities, chosen=threshold
+        ),
         "explain_beeswarm": lambda: plot_beeswarm(explanation),
         "explain_importance": lambda: plot_importance_bar(explanation),
         "explain_dependence": lambda: plot_dependence(explanation, influential[0], influential[-1]),
