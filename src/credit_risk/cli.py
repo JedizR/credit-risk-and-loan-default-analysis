@@ -1,5 +1,6 @@
 import argparse
 import json
+import warnings
 from pathlib import Path
 
 from credit_risk.config import CONFIG
@@ -10,6 +11,8 @@ from credit_risk.data import (
     load_training_data,
     prepare_dataset,
 )
+from credit_risk.explain import decision_reasons
+from credit_risk.features.engineering import engineer_features
 from credit_risk.pipeline import DEFAULT_MODEL_NAME, MODEL_BUILDERS
 from credit_risk.train import (
     load_model,
@@ -18,12 +21,13 @@ from credit_risk.train import (
     save_model,
     score_model,
     split_holdout,
-    train_model,
 )
+from credit_risk.workflow import TrainingOptions, run_training
 
 DEFAULT_MODEL_PATH = CONFIG.paths.model
 DEFAULT_METRICS_PATH = CONFIG.paths.metrics
 DEFAULT_PREDICTIONS_PATH = CONFIG.paths.predictions
+DEFAULT_REASONS_PATH = Path("out/decisions.csv")
 
 
 def _report(metrics: dict[str, float]) -> None:
@@ -38,33 +42,52 @@ def run_prepare(_args: argparse.Namespace) -> None:
 
 def run_train(args: argparse.Namespace) -> None:
     frame = load_training_data(args.data)
-    model, metrics = train_model(frame, args.model_name)
+    options = TrainingOptions(
+        tune=args.tune,
+        select_features=args.select_features,
+        remove_outliers=args.remove_outliers,
+        write_plots=args.plots,
+        trials=args.trials,
+        figures_dir=args.figures_path,
+    )
+    outcome = run_training(frame, args.model_name, options)
 
-    save_model(model, args.model_path)
-    save_metrics(metrics, args.metrics_path)
+    save_model(outcome.model, args.model_path)
+    save_metrics(outcome.metrics, args.metrics_path)
 
     print(f"Trained {args.model_name} on {len(frame)} applicants")
+    if outcome.outliers_removed:
+        print(f"Removed {outcome.outliers_removed} outliers from the training rows")
+    print(f"Using {len(outcome.features)} features: {', '.join(outcome.features)}")
+    if outcome.params:
+        print(f"Tuned parameters: {json.dumps(outcome.params)}")
+    print(f"Decision threshold: {outcome.threshold}")
     print(f"Model written to {args.model_path}")
     print(f"Metrics written to {args.metrics_path}")
-    _report(metrics)
+    if outcome.figures:
+        print(f"Wrote {len(outcome.figures)} figures to {outcome.figures[0].parent}")
+    _report(outcome.metrics)
 
 
 def run_evaluate(args: argparse.Namespace) -> None:
-    frame = load_training_data(args.data)
-    split = split_holdout(frame)
+    frame = engineer_features(load_training_data(args.data))
     model = load_model(args.model_path)
+    features = list(model.feature_names_in_)
+    split = split_holdout(frame, features)
 
-    metrics = score_model(model, split.holdout_features, split.holdout_target)
+    metrics = score_model(model, split.holdout_features, split.holdout_target, args.threshold)
 
     print(f"Evaluated {args.model_path} on {len(split.holdout_target)} held-out applicants")
     _report(metrics)
 
 
 def run_predict(args: argparse.Namespace) -> None:
-    features = load_features_to_score(args.input_path)
     model = load_model(args.model_path)
+    features = engineer_features(load_features_to_score(args.input_path))[
+        list(model.feature_names_in_)
+    ]
 
-    scored = predict_applicants(model, features)
+    scored = predict_applicants(model, features, args.threshold)
     args.output_path.parent.mkdir(parents=True, exist_ok=True)
     scored.to_csv(args.output_path, index=False)
 
@@ -73,10 +96,25 @@ def run_predict(args: argparse.Namespace) -> None:
     print(f"Predictions written to {args.output_path}")
 
 
+def run_explain(args: argparse.Namespace) -> None:
+    model = load_model(args.model_path)
+    features = engineer_features(load_features_to_score(args.input_path))[
+        list(model.feature_names_in_)
+    ].head(args.limit)
+
+    decisions = decision_reasons(model, features, args.threshold)
+    args.output_path.parent.mkdir(parents=True, exist_ok=True)
+    decisions.to_csv(args.output_path, index=False)
+
+    print(f"Explained {len(decisions)} applicants")
+    print(f"Decisions and reasons written to {args.output_path}")
+    print(decisions.head(5).to_string())
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="credit-risk",
-        description="Train, evaluate, and apply the loan default risk model.",
+        description="Prepare, train, evaluate, apply and explain the loan approval model.",
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
@@ -85,31 +123,58 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prepare.set_defaults(handler=run_prepare)
 
-    train = subcommands.add_parser("train", help="Train a model and write it to disk")
+    train = subcommands.add_parser("train", help="Run the full training pipeline")
     train.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
     train.add_argument("--model-name", choices=sorted(MODEL_BUILDERS), default=DEFAULT_MODEL_NAME)
     train.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
     train.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
+    train.add_argument("--figures-path", type=Path, default=None)
+    train.add_argument("--tune", action="store_true", help="search hyperparameters with Optuna")
+    train.add_argument("--trials", type=int, default=None, help="Optuna trials when tuning")
+    train.add_argument(
+        "--select-features", action="store_true", help="keep only the consensus feature set"
+    )
+    train.add_argument(
+        "--remove-outliers", action="store_true", help="drop consensus outliers from training rows"
+    )
+    train.add_argument(
+        "--plots", action="store_true", help="write every figure to the reports directory"
+    )
     train.set_defaults(handler=run_train)
 
     evaluate = subcommands.add_parser(
         "evaluate", help="Score a saved model on the held-out applicants"
     )
-    evaluate.add_argument(
-        "--data", type=Path, default=None, help="defaults to the prepared dataset"
-    )
+    evaluate.add_argument("--data", type=Path, default=None)
     evaluate.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
+    evaluate.add_argument("--threshold", type=float, default=None)
     evaluate.set_defaults(handler=run_evaluate)
 
     predict = subcommands.add_parser("predict", help="Score new applicants from a CSV")
     predict.add_argument("--input-path", type=Path, required=True)
     predict.add_argument("--output-path", type=Path, default=DEFAULT_PREDICTIONS_PATH)
     predict.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
+    predict.add_argument("--threshold", type=float, default=None)
     predict.set_defaults(handler=run_predict)
+
+    explain = subcommands.add_parser(
+        "explain", help="Score applicants with a human-readable reason for each decision"
+    )
+    explain.add_argument("--input-path", type=Path, required=True)
+    explain.add_argument("--output-path", type=Path, default=DEFAULT_REASONS_PATH)
+    explain.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
+    explain.add_argument("--threshold", type=float, default=None)
+    explain.add_argument("--limit", type=int, default=100, help="applicants to explain")
+    explain.set_defaults(handler=run_explain)
 
     return parser
 
 
 def main() -> None:
+    # Library-internal noise (SHAP colormaps, sklearn feature-name checks) would otherwise bury
+    # the run's own output; warnings stay visible in the tests and notebooks.
+    warnings.filterwarnings("ignore", category=UserWarning)
+    warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
+
     args = build_parser().parse_args()
     args.handler(args)
