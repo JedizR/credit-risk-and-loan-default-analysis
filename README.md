@@ -85,6 +85,24 @@ optuna_trials = 100
 false_approval_cost = 10.0     # a bad approval costs ten times a missed good applicant
 ```
 
+## Run history
+
+Every `train` records itself, so a model always carries the story of what produced it. Alongside
+the working `models/model.joblib` it writes, under `models/`:
+
+| Artefact | What it holds |
+| --- | --- |
+| `<run_id>.joblib` | the versioned model |
+| `<run_id>.meta.json` | full manifest: params, features, metrics, config, data hashes, git SHA, library versions |
+| `model_cards/<run_id>.md` | the manifest rendered for a human, with a reproduce command |
+| `registry.json` | an index of every run and a `current` pointer |
+
+The `run_id` is a content hash of the inputs that define the model (data, config, parameters), so
+**identical inputs reproduce the same id** on any machine — that is the reproducibility check.
+The code version comes from `git rev-parse` locally, the `GIT_SHA` environment variable in the
+container, or is recorded as null when neither is available. These artefacts stay local (gitignored);
+the manifest, not git, is what makes a run reproducible.
+
 ## Docker
 
 The image ships the CLI as its entry point, so anything after the image name is passed
