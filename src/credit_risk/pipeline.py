@@ -54,8 +54,10 @@ def build_preprocessor(
     numeric_features: list[str] | None = None,
     categorical_features: list[str] | None = None,
 ) -> ColumnTransformer:
-    numeric_features = numeric_features or NUMERIC_FEATURES
-    categorical_features = categorical_features or CATEGORICAL_FEATURES
+    numeric_features = NUMERIC_FEATURES if numeric_features is None else numeric_features
+    categorical_features = (
+        CATEGORICAL_FEATURES if categorical_features is None else categorical_features
+    )
 
     numeric_steps = Pipeline(
         [
@@ -69,12 +71,14 @@ def build_preprocessor(
             ("encode", OneHotEncoder(handle_unknown="ignore")),
         ]
     )
-    return ColumnTransformer(
-        [
-            ("numeric", numeric_steps, numeric_features),
-            ("categorical", categorical_steps, categorical_features),
-        ]
-    )
+
+    # A selected subset may contain no columns of one kind; an empty branch would fail to fit.
+    transformers = []
+    if numeric_features:
+        transformers.append(("numeric", numeric_steps, numeric_features))
+    if categorical_features:
+        transformers.append(("categorical", categorical_steps, categorical_features))
+    return ColumnTransformer(transformers)
 
 
 def build_model(
@@ -85,6 +89,7 @@ def build_model(
 ) -> Pipeline:
     if model_name not in MODEL_BUILDERS:
         raise UnknownModelError(model_name)
+
     return Pipeline(
         [
             ("preprocess", build_preprocessor(numeric_features, categorical_features)),
