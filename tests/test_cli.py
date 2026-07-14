@@ -200,3 +200,51 @@ def test_preprocess_writes_the_model_ready_dataset(tmp_path: Path) -> None:
     engineered = pd.read_parquet(output)
     assert "credit_score_x_employed" in engineered.columns
     assert len(engineered) > 0
+
+
+def test_train_records_a_versioned_run(training_csv: Path, tmp_path: Path) -> None:
+    model_path = tmp_path / "model.joblib"
+
+    _run(
+        [
+            "train",
+            "--data",
+            str(training_csv),
+            "--model-name",
+            "logistic_regression",
+            "--model-path",
+            str(model_path),
+            "--metrics-path",
+            str(tmp_path / "metrics.json"),
+        ]
+    )
+
+    registry = json.loads((tmp_path / "registry.json").read_text())
+    run_id = registry["current"]
+    assert run_id in registry["runs"]
+    assert (tmp_path / f"{run_id}.joblib").exists()
+    assert (tmp_path / f"{run_id}.meta.json").exists()
+    assert (tmp_path / "model_cards" / f"{run_id}.md").exists()
+
+
+def test_retraining_identical_inputs_reuses_the_run_id(training_csv: Path, tmp_path: Path) -> None:
+    def train_once(target: Path) -> str:
+        _run(
+            [
+                "train",
+                "--data",
+                str(training_csv),
+                "--model-name",
+                "logistic_regression",
+                "--model-path",
+                str(target / "model.joblib"),
+                "--metrics-path",
+                str(target / "metrics.json"),
+            ]
+        )
+        return json.loads((target / "registry.json").read_text())["current"]
+
+    first = train_once(tmp_path / "a")
+    second = train_once(tmp_path / "b")
+
+    assert first == second

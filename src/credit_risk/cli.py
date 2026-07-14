@@ -22,7 +22,13 @@ from credit_risk.train import (
     score_model,
     split_holdout,
 )
-from credit_risk.workflow import TrainingOptions, run_training, write_preprocessed_dataset
+from credit_risk.versioning import build_manifest, save_run
+from credit_risk.workflow import (
+    TrainingOptions,
+    TrainingOutcome,
+    run_training,
+    write_preprocessed_dataset,
+)
 
 DEFAULT_MODEL_PATH = CONFIG.paths.model
 DEFAULT_METRICS_PATH = CONFIG.paths.metrics
@@ -64,6 +70,15 @@ def run_train(args: argparse.Namespace) -> None:
 
     save_model(outcome.model, args.model_path)
     save_metrics(outcome.metrics, args.metrics_path)
+    # Version artefacts live next to the working model, so a custom --model-path keeps them close.
+    run_dir = args.model_path.parent
+    record = save_run(
+        outcome.model,
+        _manifest_for(outcome, options, args.model_name),
+        models_dir=run_dir,
+        cards_dir=run_dir / "model_cards",
+        registry_path=run_dir / "registry.json",
+    )
 
     print(f"Trained {args.model_name} on {len(frame)} applicants")
     if outcome.outliers_removed:
@@ -76,7 +91,23 @@ def run_train(args: argparse.Namespace) -> None:
     print(f"Metrics written to {args.metrics_path}")
     if outcome.figures:
         print(f"Wrote {len(outcome.figures)} figures to {outcome.figures[0].parent}")
+    print(f"Recorded run {record.run_id}; model card at {record.card_path}")
     _report(outcome.metrics)
+
+
+def _manifest_for(outcome: TrainingOutcome, options: TrainingOptions, model_name: str) -> dict:
+    return build_manifest(
+        model_name=model_name,
+        params=outcome.params,
+        features=outcome.features,
+        threshold=outcome.threshold,
+        metrics=outcome.metrics,
+        options={
+            "tune": options.tune,
+            "select_features": options.select_features,
+            "remove_outliers": options.remove_outliers,
+        },
+    )
 
 
 def run_evaluate(args: argparse.Namespace) -> None:
