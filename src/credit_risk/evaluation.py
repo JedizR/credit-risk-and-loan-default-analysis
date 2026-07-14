@@ -124,6 +124,7 @@ def plot_roc_and_pr_curves(
     pr_axis.legend(loc="lower left")
 
     figure.tight_layout()
+    plt.close(figure)
     return figure
 
 
@@ -146,6 +147,7 @@ def plot_calibration_curve(
     )
     axis.legend()
     figure.tight_layout()
+    plt.close(figure)
     return figure
 
 
@@ -161,6 +163,7 @@ def plot_confusion_matrix(
     )
     axis.set_title(f"Confusion matrix (threshold={threshold:.2f})")
     figure.tight_layout()
+    plt.close(figure)
     return figure
 
 
@@ -180,6 +183,7 @@ def plot_threshold_cost(
     axis.set(xlabel="decision threshold", ylabel="expected cost", title="Cost of each threshold")
     axis.legend()
     figure.tight_layout()
+    plt.close(figure)
     return figure
 
 
@@ -216,6 +220,7 @@ def plot_learning_curve(
     axis.set(xlabel="training rows", ylabel="PR-AUC", title=f"Learning curve ({model_name})")
     axis.legend()
     figure.tight_layout()
+    plt.close(figure)
     return figure
 
 
@@ -228,6 +233,7 @@ def plot_model_comparison(scores: pd.DataFrame) -> Figure:
     for position, value in enumerate(ordered["mean"]):
         axis.text(value + 0.005, position, f"{value:.3f}", va="center")
     figure.tight_layout()
+    plt.close(figure)
     return figure
 
 

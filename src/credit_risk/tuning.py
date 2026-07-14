@@ -101,6 +101,7 @@ def plot_tuning_history(study: optuna.Study) -> Figure:
     )
     axis.legend()
     figure.tight_layout()
+    plt.close(figure)
     return figure
 
 
@@ -113,6 +114,7 @@ def plot_param_importances(study: optuna.Study) -> Figure:
     axis.barh(ordered.index, ordered.to_numpy(), color="#4c72b0", alpha=0.85)
     axis.set(xlabel="importance", title="Hyperparameter importance")
     figure.tight_layout()
+    plt.close(figure)
     return figure
 
 

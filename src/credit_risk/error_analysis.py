@@ -117,6 +117,7 @@ def plot_error_overview(classified: pd.DataFrame) -> Figure:
     probability_axis.set_title("Predicted probability: errors vs correct")
 
     figure.tight_layout()
+    plt.close(figure)
     return figure
 
 
@@ -134,4 +135,5 @@ def plot_error_rate_by_segment(classified: pd.DataFrame, columns: list[str]) -> 
         axis.axvline(classified["is_error"].mean(), ls="--", c="black", lw=1)
         axis.set(xlabel="error rate", ylabel="", title=column)
     figure.tight_layout()
+    plt.close(figure)
     return figure
