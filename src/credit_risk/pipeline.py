@@ -51,9 +51,12 @@ class UnknownModelError(ValueError):
 
 
 def build_preprocessor(
-    numeric_features: list[str] = NUMERIC_FEATURES,
-    categorical_features: list[str] = CATEGORICAL_FEATURES,
+    numeric_features: list[str] | None = None,
+    categorical_features: list[str] | None = None,
 ) -> ColumnTransformer:
+    numeric_features = numeric_features or NUMERIC_FEATURES
+    categorical_features = categorical_features or CATEGORICAL_FEATURES
+
     numeric_steps = Pipeline(
         [
             ("impute", SimpleImputer(strategy="median")),
@@ -76,8 +79,8 @@ def build_preprocessor(
 
 def build_model(
     model_name: str = DEFAULT_MODEL_NAME,
-    numeric_features: list[str] = NUMERIC_FEATURES,
-    categorical_features: list[str] = CATEGORICAL_FEATURES,
+    numeric_features: list[str] | None = None,
+    categorical_features: list[str] | None = None,
     params: dict[str, Any] | None = None,
 ) -> Pipeline:
     if model_name not in MODEL_BUILDERS:
