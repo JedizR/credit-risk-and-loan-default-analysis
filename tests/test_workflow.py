@@ -78,7 +78,7 @@ def test_preprocessed_dataset_is_the_model_ready_frame(
 
     path = tmp_path / "preprocessed" / "applicants.parquet"
 
-    engineered = write_preprocessed_dataset(sample_frame, path)
+    engineered = write_preprocessed_dataset(sample_frame, path, tmp_path / "registry.json")
 
     assert path.exists()
     restored = pd.read_parquet(path)

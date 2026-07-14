@@ -60,7 +60,7 @@ def error_profile(classified: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
 
     rows = {}
     for column in columns:
-        if not np.issubdtype(classified[column].dtype, np.number):
+        if not pd.api.types.is_numeric_dtype(classified[column]):
             continue
         rows[column] = {
             "mean_when_wrong": round(errors[column].mean(), 2),

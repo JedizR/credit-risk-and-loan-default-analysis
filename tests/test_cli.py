@@ -187,7 +187,15 @@ def test_explain_emits_a_reason_for_every_applicant(
 def test_preprocess_writes_the_model_ready_dataset(tmp_path: Path) -> None:
     output = tmp_path / "preprocessed" / "applicants.parquet"
 
-    _run(["preprocess", "--output-path", str(output)])
+    _run(
+        [
+            "preprocess",
+            "--output-path",
+            str(output),
+            "--registry-path",
+            str(tmp_path / "registry.json"),
+        ]
+    )
 
     engineered = pd.read_parquet(output)
     assert "credit_score_x_employed" in engineered.columns
