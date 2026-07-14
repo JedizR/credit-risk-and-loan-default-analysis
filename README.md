@@ -4,7 +4,22 @@ Final project for the Practical Machine Learning class. Predicts whether a loan 
 
 ## Dataset
 
-`data/raw/loan_risk_prediction_dataset.csv` — 5,000 applicants, 9 features, binary target `LoanApproved`. See [data/raw/datacard.md](data/raw/datacard.md). `make prepare` repairs impossible values and writes a typed `data/processed/applicants.parquet` alongside a `data/registry.json` provenance record.
+`data/raw/loan_risk_prediction_dataset.csv` — 5,000 applicants, 9 features, binary target `LoanApproved`. See [data/raw/datacard.md](data/raw/datacard.md).
+
+The data moves through three stages, each stored as a typed parquet and hashed into
+`data/registry.json`:
+
+| Stage | Path | What it holds |
+| --- | --- | --- |
+| raw | `data/raw/*.csv` | the original file, never modified |
+| processed | `data/processed/applicants.parquet` | `make prepare` — impossible values repaired, dtypes fixed |
+| preprocessed | `data/preprocessed/applicants.parquet` | `make preprocess` — the model-ready frame, with the engineered features |
+
+The preprocessed parquet is the exact input the model pipeline is fitted on. Only the
+*stateless* half of preprocessing is stored there: imputation, scaling and encoding are
+deliberately left out, because they are fitted per training fold — a globally fitted version
+saved to disk would leak the holdout into the training data. Those steps stay inside the
+sklearn pipeline.
 
 Three properties drive the modelling choices:
 
@@ -24,6 +39,7 @@ make setup
 
 ```bash
 make prepare                        # repair impossible values, write the typed parquet
+make preprocess                     # engineer the features, write the model-ready parquet
 make train                          # full pipeline: outliers, selection, tuning, threshold
 make train MODEL=random_forest      # train a different model
 make train PLOT=true                # also write every figure to reports/figures/
