@@ -1,5 +1,7 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.figure import Figure
 from sklearn.feature_selection import mutual_info_classif
 from sklearn.inspection import permutation_importance
 from sklearn.model_selection import train_test_split
@@ -178,3 +180,23 @@ def select_features(
     chosen = int(within_one_error.index.min())
 
     return list(ranking.index[:chosen]), curve
+
+
+def plot_selection_curve(curve: pd.DataFrame, selected: int | None = None) -> Figure:
+    """Cross-validated score as features are added, with the chosen set marked."""
+    figure, axis = plt.subplots(figsize=(8, 4.5))
+    axis.errorbar(curve.index, curve["mean"], yerr=curve["std"], marker="o", capsize=3)
+
+    best = int(curve["mean"].idxmax())
+    axis.axvline(best, ls=":", c="grey", label=f"best score (k={best})")
+    if selected:
+        axis.axvline(selected, ls="--", c="#c44e52", label=f"selected (k={selected})")
+
+    axis.set(
+        xlabel="number of features (ranked by consensus)",
+        ylabel="cross-validated PR-AUC",
+        title="Feature selection curve",
+    )
+    axis.legend()
+    figure.tight_layout()
+    return figure
