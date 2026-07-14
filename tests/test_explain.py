@@ -81,7 +81,7 @@ def test_reason_count_is_capped(sample_frame: pd.DataFrame) -> None:
     assert (reasons["reasons"].str.count(";") == 1).all()
 
 
-def test_shap_plots_return_figures(sample_frame: pd.DataFrame) -> None:
+def test_shap_plots_are_drawn_not_blank(sample_frame: pd.DataFrame) -> None:
     model, features = _fitted(sample_frame)
     explanation = explain_model(model, features)
 
@@ -93,4 +93,8 @@ def test_shap_plots_return_figures(sample_frame: pd.DataFrame) -> None:
 
     for figure in figures:
         assert isinstance(figure, Figure)
+        # A figure object alone proves nothing: shap builds its own figures, so assert that
+        # something was actually drawn on the one that comes back.
+        assert figure.axes
+        assert any(axis.collections or axis.lines or axis.patches for axis in figure.axes)
         plt.close(figure)
