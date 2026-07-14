@@ -172,13 +172,22 @@ def plot_threshold_cost(
     probabilities: np.ndarray,
     false_approval_cost: float | None = None,
     false_rejection_cost: float | None = None,
+    chosen: float | None = None,
 ) -> Figure:
+    """Expected cost across thresholds.
+
+    `chosen` is the threshold the model actually uses. It is picked on out-of-fold *training*
+    predictions, so it will not sit exactly on this curve's minimum — showing both makes that
+    gap visible instead of implying the holdout optimum is what ships.
+    """
     costs = threshold_cost_curve(target, probabilities, false_approval_cost, false_rejection_cost)
     best = optimal_threshold(target, probabilities, false_approval_cost, false_rejection_cost)
 
     figure, axis = plt.subplots(figsize=(7, 4.5))
     axis.plot(costs["threshold"], costs["expected_cost"], label="expected cost")
-    axis.axvline(best, ls="--", c="#c44e52", label=f"cost-optimal ({best:.2f})")
+    axis.axvline(best, ls="--", c="#dd8452", label=f"optimum on this data ({best:.2f})")
+    if chosen is not None:
+        axis.axvline(chosen, ls="-", c="#c44e52", label=f"threshold in use ({chosen:.2f})")
     axis.axvline(0.5, ls=":", c="grey", label="default (0.50)")
     axis.set(xlabel="decision threshold", ylabel="expected cost", title="Cost of each threshold")
     axis.legend()
