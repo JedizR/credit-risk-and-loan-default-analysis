@@ -4,7 +4,6 @@ import pandas as pd
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.figure import Figure  # noqa: E402
 
 from credit_risk.data.schema import TARGET_COLUMN  # noqa: E402
 from credit_risk.explain import (  # noqa: E402
@@ -20,6 +19,7 @@ from credit_risk.explain import (  # noqa: E402
 from credit_risk.features.engineering import engineer_features  # noqa: E402
 from credit_risk.features.selection import candidate_features, split_feature_types  # noqa: E402
 from credit_risk.pipeline import build_model  # noqa: E402
+from tests.plot_assertions import assert_figure_is_drawn  # noqa: E402
 
 
 def _fitted(sample_frame: pd.DataFrame):
@@ -92,9 +92,5 @@ def test_shap_plots_are_drawn_not_blank(sample_frame: pd.DataFrame) -> None:
     ]
 
     for figure in figures:
-        assert isinstance(figure, Figure)
-        # A figure object alone proves nothing: shap builds its own figures, so assert that
-        # something was actually drawn on the one that comes back.
-        assert figure.axes
-        assert any(axis.collections or axis.lines or axis.patches for axis in figure.axes)
+        assert_figure_is_drawn(figure)
         plt.close(figure)

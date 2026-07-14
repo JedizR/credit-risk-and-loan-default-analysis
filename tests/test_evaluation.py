@@ -4,7 +4,6 @@ import pandas as pd
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.figure import Figure  # noqa: E402
 
 from credit_risk.data.schema import FEATURE_COLUMNS, TARGET_COLUMN  # noqa: E402
 from credit_risk.evaluation import (  # noqa: E402
@@ -19,6 +18,7 @@ from credit_risk.evaluation import (  # noqa: E402
     threshold_cost_curve,
 )
 from credit_risk.pipeline import build_model  # noqa: E402
+from tests.plot_assertions import assert_figure_is_drawn  # noqa: E402
 
 
 def _fitted(sample_frame: pd.DataFrame):
@@ -91,7 +91,7 @@ def test_curve_plots_return_figures(sample_frame: pd.DataFrame) -> None:
     ]
 
     for figure in figures:
-        assert isinstance(figure, Figure)
+        assert_figure_is_drawn(figure)
         plt.close(figure)
 
 
@@ -100,7 +100,7 @@ def test_learning_curve_plot_returns_a_figure(sample_frame: pd.DataFrame) -> Non
         sample_frame[FEATURE_COLUMNS], sample_frame[TARGET_COLUMN], "logistic_regression"
     )
 
-    assert isinstance(figure, Figure)
+    assert_figure_is_drawn(figure)
     plt.close(figure)
 
 
@@ -109,5 +109,5 @@ def test_model_comparison_plot_returns_a_figure() -> None:
 
     figure = plot_model_comparison(scores)
 
-    assert isinstance(figure, Figure)
+    assert_figure_is_drawn(figure)
     plt.close(figure)

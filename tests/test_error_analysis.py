@@ -4,7 +4,6 @@ import pandas as pd
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.figure import Figure  # noqa: E402
 
 from credit_risk.data.schema import FEATURE_COLUMNS, TARGET_COLUMN  # noqa: E402
 from credit_risk.error_analysis import (  # noqa: E402
@@ -18,6 +17,7 @@ from credit_risk.error_analysis import (  # noqa: E402
     plot_error_rate_by_segment,
 )
 from credit_risk.pipeline import build_model  # noqa: E402
+from tests.plot_assertions import assert_figure_is_drawn  # noqa: E402
 
 
 def _classified(sample_frame: pd.DataFrame) -> pd.DataFrame:
@@ -81,5 +81,5 @@ def test_error_plots_return_figures(sample_frame: pd.DataFrame) -> None:
     ]
 
     for figure in figures:
-        assert isinstance(figure, Figure)
+        assert_figure_is_drawn(figure)
         plt.close(figure)
