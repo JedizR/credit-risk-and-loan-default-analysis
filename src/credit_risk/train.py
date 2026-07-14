@@ -32,16 +32,25 @@ class HoldoutSplit:
     holdout_target: pd.Series
 
 
-def split_holdout(frame: pd.DataFrame, feature_columns: list[str] | None = None) -> HoldoutSplit:
-    features = frame[feature_columns] if feature_columns else frame.drop(columns=[TARGET_COLUMN])
-    train_features, holdout_features, train_target, holdout_target = train_test_split(
-        features,
-        frame[TARGET_COLUMN],
+def split_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Stratified train/holdout split of whole rows, so row-level steps can act on the frame."""
+    return train_test_split(
+        frame,
         test_size=CONFIG.training.holdout_fraction,
         random_state=CONFIG.seed,
         stratify=frame[TARGET_COLUMN],
     )
-    return HoldoutSplit(train_features, holdout_features, train_target, holdout_target)
+
+
+def split_holdout(frame: pd.DataFrame, feature_columns: list[str] | None = None) -> HoldoutSplit:
+    train_frame, holdout_frame = split_frame(frame)
+    columns = feature_columns or [column for column in frame.columns if column != TARGET_COLUMN]
+    return HoldoutSplit(
+        train_frame[columns],
+        holdout_frame[columns],
+        train_frame[TARGET_COLUMN],
+        holdout_frame[TARGET_COLUMN],
+    )
 
 
 def score_model(
