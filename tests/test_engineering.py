@@ -38,8 +38,9 @@ def test_interaction_zeroes_out_for_unemployed_applicants(sample_frame: pd.DataF
 def test_thresholds_come_from_config(sample_frame: pd.DataFrame) -> None:
     engineered = engineer_features(sample_frame)
 
-    expected = (sample_frame["CreditScore"] < CONFIG.thresholds.low_credit_score).sum()
-    assert engineered["low_credit_score"].sum() == expected
+    below_cutoff = sample_frame["CreditScore"] < CONFIG.thresholds.low_credit_score
+    missing = sample_frame["CreditScore"].isna()
+    assert engineered["low_credit_score"].sum() == (below_cutoff | missing).sum()
 
 
 def test_debt_to_income_never_divides_by_zero() -> None:
@@ -80,3 +81,30 @@ def test_credit_band_is_ordered_by_score(sample_frame: pd.DataFrame) -> None:
     prime = banded.loc[banded["credit_band"] == "prime", "CreditScore"]
 
     assert poor.max() < prime.min()
+
+
+def test_missing_credit_score_counts_as_low_credit(sample_frame: pd.DataFrame) -> None:
+    engineered = engineer_features(sample_frame)
+    missing = sample_frame["CreditScore"].isna()
+
+    assert (engineered.loc[missing, "low_credit_score"] == 1).all()
+
+
+def test_debt_to_income_is_capped_against_near_zero_incomes() -> None:
+    frame = pd.DataFrame(
+        {
+            "Age": [40],
+            "Income": [129.0],
+            "LoanAmount": [23_617.0],
+            "CreditScore": [700.0],
+            "YearsExperience": [5],
+            "Gender": ["Male"],
+            "Education": ["PhD"],
+            "City": ["Chicago"],
+            "EmploymentType": ["Salaried"],
+        }
+    )
+
+    engineered = engineer_features(frame)
+
+    assert engineered["debt_to_income"].max() == CONFIG.thresholds.max_debt_to_income
