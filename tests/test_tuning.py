@@ -5,7 +5,6 @@ import pytest
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.figure import Figure  # noqa: E402
 
 from credit_risk.data.schema import FEATURE_COLUMNS, TARGET_COLUMN  # noqa: E402
 from credit_risk.pipeline import UnknownModelError, build_model  # noqa: E402
@@ -17,6 +16,7 @@ from credit_risk.tuning import (  # noqa: E402
     tune_model,
     tuning_history,
 )
+from tests.plot_assertions import assert_figure_is_drawn  # noqa: E402
 
 
 def test_every_registered_model_has_a_search_space() -> None:
@@ -74,5 +74,5 @@ def test_history_and_plots(sample_frame: pd.DataFrame) -> None:
     assert len(history) == 4
 
     for figure in (plot_tuning_history(study), plot_param_importances(study)):
-        assert isinstance(figure, Figure)
+        assert_figure_is_drawn(figure)
         plt.close(figure)

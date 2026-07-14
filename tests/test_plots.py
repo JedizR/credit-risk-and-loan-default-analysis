@@ -5,9 +5,9 @@ import pytest
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.figure import Figure  # noqa: E402
 
 from credit_risk.eda import plots  # noqa: E402
+from tests.plot_assertions import assert_figure_is_drawn  # noqa: E402
 
 PLOT_FUNCTIONS = [
     plots.plot_numeric_distributions,
@@ -25,7 +25,7 @@ PLOT_FUNCTIONS = [
 def test_plot_returns_a_figure(plot_function, sample_frame: pd.DataFrame) -> None:
     figure = plot_function(sample_frame)
 
-    assert isinstance(figure, Figure)
+    assert_figure_is_drawn(figure)
     plt.close(figure)
 
 
