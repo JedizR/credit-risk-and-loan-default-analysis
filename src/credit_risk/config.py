@@ -14,7 +14,7 @@ class Paths:
     model: Path = Path("models/model.joblib")
     models_dir: Path = Path("models")
     model_registry: Path = Path("models/registry.json")
-    model_cards: Path = Path("reports/model_cards")
+    model_cards: Path = Path("models/model_cards")
     metrics: Path = Path("reports/metrics.json")
     predictions: Path = Path("out/predictions.csv")
     figures: Path = Path("reports/figures")
