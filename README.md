@@ -23,7 +23,9 @@ make setup
 ## Usage
 
 ```bash
+make prepare                        # repair impossible values, write the typed parquet
 make train                          # train, save models/model.joblib, write reports/metrics.json
+make train MODEL=random_forest      # train a different model
 make eval                           # score the saved model on the held-out 20%
 make predict APPLICANTS=new.csv     # score new applicants into out/predictions.csv
 make lint                           # ruff check + format check
@@ -41,14 +43,28 @@ Available models: `logistic_regression` (default), `random_forest`, `gradient_bo
 
 ## Docker
 
-The image ships the CLI as its entry point. Data and outputs are mounted rather than baked in.
+The image ships the CLI as its entry point, so anything after the image name is passed
+straight to `credit-risk`. Data and artefacts are mounted rather than baked in.
 
 ```bash
-make docker-build
-make docker-train
+make docker-build                        # build the image
+make docker-prepare                      # build the typed dataset in the container
+make docker-train MODEL=random_forest    # train in the container
+make docker-eval                         # evaluate the saved model
+make docker-predict                      # score APPLICANTS into out/
 ```
 
-Tagging a release on `main` publishes the image to `ghcr.io/jedizr/credit-risk-and-loan-default-analysis`.
+The whole pipeline runs in the container, and results land on the host:
+
+| Mount | Mode | Contents |
+| --- | --- | --- |
+| `data/raw` | read-only | the immutable source dataset |
+| `data/` | read-write | derived parquet and provenance |
+| `models/`, `reports/`, `out/` | read-write | model, metrics, predictions |
+
+A bare `docker run --rm credit-risk` prints the CLI help — the smoke test CI runs on every
+pull request. Tagging a release on `main` publishes the image to
+`ghcr.io/jedizr/credit-risk-and-loan-default-analysis`.
 
 ## Layout
 
