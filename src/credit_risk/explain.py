@@ -187,3 +187,8 @@ def decision_reasons(
             }
         )
     return pd.DataFrame(rows, index=features.index)
+
+
+def top_features(explanation: Explanation, count: int = 2) -> list[str]:
+    """The most influential encoded features, so plots never name a column that was selected out."""
+    return list(global_importance(explanation).index[:count])
