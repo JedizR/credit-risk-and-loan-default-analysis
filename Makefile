@@ -1,10 +1,24 @@
-.PHONY: help setup lint test prepare train eval predict \
-	docker-build docker-prepare docker-train docker-eval docker-predict clean
+.PHONY: help setup lint test prepare train eval predict explain \
+	docker-build docker-prepare docker-train docker-eval docker-predict docker-explain clean
 
 IMAGE := credit-risk
 APPLICANTS := data/raw/loan_risk_prediction_dataset.csv
-MODEL ?= logistic_regression
 ARTEFACT_DIRS := models reports out
+
+# Training knobs. Override on the command line, e.g. make docker-train MODEL=random_forest PLOT=true
+MODEL ?= lightgbm
+PLOT ?= false
+TUNE ?= true
+SELECT ?= true
+REMOVE_OUTLIERS ?= true
+TRIALS ?=
+
+TRAIN_FLAGS := --model-name $(MODEL) \
+	$(if $(filter true,$(PLOT)),--plots) \
+	$(if $(filter true,$(TUNE)),--tune) \
+	$(if $(filter true,$(SELECT)),--select-features) \
+	$(if $(filter true,$(REMOVE_OUTLIERS)),--remove-outliers) \
+	$(if $(TRIALS),--trials $(TRIALS))
 
 # Raw data stays read-only; derived data, models and reports are written back to the host.
 DOCKER_RUN = docker run --rm \
@@ -32,8 +46,8 @@ test:  ## Run the test suite with coverage
 prepare:  ## Repair and convert the raw CSV to a typed parquet dataset
 	uv run credit-risk prepare
 
-train:  ## Train a model: make train MODEL=random_forest
-	uv run credit-risk train --model-name $(MODEL)
+train: | $(ARTEFACT_DIRS)  ## Train: make train MODEL=lightgbm PLOT=true TUNE=true
+	uv run credit-risk train $(TRAIN_FLAGS)
 
 eval:  ## Evaluate the saved model on the holdout split
 	uv run credit-risk evaluate
@@ -41,20 +55,26 @@ eval:  ## Evaluate the saved model on the holdout split
 predict:  ## Score applicants from APPLICANTS=path/to.csv
 	uv run credit-risk predict --input-path $(APPLICANTS)
 
+explain:  ## Score applicants with a readable reason per decision
+	uv run credit-risk explain --input-path $(APPLICANTS)
+
 docker-build:  ## Build the container image
 	docker build -t $(IMAGE) .
 
 docker-prepare: | $(ARTEFACT_DIRS)  ## Build the typed dataset inside the container
 	$(DOCKER_RUN) prepare
 
-docker-train: | $(ARTEFACT_DIRS)  ## Train in the container: make docker-train MODEL=random_forest
-	$(DOCKER_RUN) train --model-name $(MODEL)
+docker-train: | $(ARTEFACT_DIRS)  ## Train in the container: make docker-train MODEL=lightgbm PLOT=true
+	$(DOCKER_RUN) train $(TRAIN_FLAGS)
 
 docker-eval: | $(ARTEFACT_DIRS)  ## Evaluate the saved model inside the container
 	$(DOCKER_RUN) evaluate
 
 docker-predict: | $(ARTEFACT_DIRS)  ## Score APPLICANTS in the container into out/
 	$(DOCKER_RUN) predict --input-path $(APPLICANTS)
+
+docker-explain: | $(ARTEFACT_DIRS)  ## Explain decisions in the container into out/
+	$(DOCKER_RUN) explain --input-path $(APPLICANTS)
 
 $(ARTEFACT_DIRS):
 	mkdir -p $@
