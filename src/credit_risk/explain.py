@@ -113,7 +113,6 @@ def plot_dependence(
     This is where the soft-AND shows up: a rising credit score only earns approval while the
     applicant is employed, so the two colours separate into different curves.
     """
-    figure = plt.figure(figsize=(7, 5))
     shap.dependence_plot(
         feature,
         explanation.values,
@@ -122,6 +121,10 @@ def plot_dependence(
         interaction_index=interaction_feature,
         show=False,
     )
+    # dependence_plot builds its own figure rather than drawing on the current one, so the
+    # figure it actually drew has to be taken back from pyplot.
+    figure = plt.gcf()
+    figure.set_size_inches(7.5, 5)
     plt.tight_layout()
     return figure
 
