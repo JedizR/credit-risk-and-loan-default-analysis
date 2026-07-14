@@ -7,8 +7,8 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 
+from credit_risk.config import CONFIG
 from credit_risk.data.schema import CATEGORICAL_FEATURES, NUMERIC_FEATURES, TARGET_COLUMN
-from credit_risk.eda.profile import RANDOM_STATE
 
 APPROVED_PALETTE = {0: "#b0b0b0", 1: "#c44e52"}
 
@@ -126,7 +126,7 @@ def plot_tsne(
         np.hstack([numeric_block.to_numpy(), encoded.to_numpy(dtype=float)])
     )
     embedding = TSNE(
-        n_components=2, perplexity=perplexity, init="pca", random_state=RANDOM_STATE
+        n_components=2, perplexity=perplexity, init="pca", random_state=CONFIG.seed
     ).fit_transform(standardized)
 
     fig, axis = plt.subplots(figsize=(6.5, 6))
@@ -143,7 +143,7 @@ def plot_tsne(
 
 def plot_pca_scree(frame: pd.DataFrame, columns: list[str] = NUMERIC_FEATURES) -> Figure:
     standardized = StandardScaler().fit_transform(frame[columns].fillna(frame[columns].median()))
-    variance_ratio = PCA(random_state=RANDOM_STATE).fit(standardized).explained_variance_ratio_
+    variance_ratio = PCA(random_state=CONFIG.seed).fit(standardized).explained_variance_ratio_
 
     fig, axis = plt.subplots(figsize=(6, 4))
     components = range(1, len(variance_ratio) + 1)

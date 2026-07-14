@@ -2,6 +2,7 @@ import argparse
 import json
 from pathlib import Path
 
+from credit_risk.config import CONFIG
 from credit_risk.data import (
     PROCESSED_PARQUET,
     REGISTRY_JSON,
@@ -20,9 +21,9 @@ from credit_risk.train import (
     train_model,
 )
 
-DEFAULT_MODEL_PATH = Path("models/model.joblib")
-DEFAULT_METRICS_PATH = Path("reports/metrics.json")
-DEFAULT_PREDICTIONS_PATH = Path("out/predictions.csv")
+DEFAULT_MODEL_PATH = CONFIG.paths.model
+DEFAULT_METRICS_PATH = CONFIG.paths.metrics
+DEFAULT_PREDICTIONS_PATH = CONFIG.paths.predictions
 
 
 def _report(metrics: dict[str, float]) -> None:

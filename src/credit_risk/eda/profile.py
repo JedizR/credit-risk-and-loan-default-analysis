@@ -4,13 +4,13 @@ from scipy.stats import chi2_contingency
 from sklearn.feature_selection import mutual_info_classif
 from sklearn.metrics import roc_auc_score
 
+from credit_risk.config import CONFIG
 from credit_risk.data.quality import IMPOSSIBLE_NEGATIVE_FEATURES
 from credit_risk.data.schema import CATEGORICAL_FEATURES, NUMERIC_FEATURES, TARGET_COLUMN
 
-RANDOM_STATE = 42
-INFORMATIVE_MISSING_DELTA = 0.05
-SIGNAL_MUTUAL_INFO = 0.01
-SENSITIVE_FEATURES = ["Gender", "City"]
+INFORMATIVE_MISSING_DELTA = CONFIG.thresholds.informative_missing_delta
+SIGNAL_MUTUAL_INFO = CONFIG.thresholds.signal_mutual_info
+SENSITIVE_FEATURES = list(CONFIG.sensitive_features)
 
 
 def overview(frame: pd.DataFrame) -> pd.Series:
@@ -141,7 +141,7 @@ def target_association(
         encoded[numeric + categorical],
         target_values,
         discrete_features=discrete,
-        random_state=RANDOM_STATE,
+        random_state=CONFIG.seed,
     )
 
     rows = []

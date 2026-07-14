@@ -1,5 +1,7 @@
 from collections.abc import Callable
+from typing import Any
 
+from lightgbm import LGBMClassifier
 from sklearn.base import ClassifierMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
@@ -8,29 +10,38 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from credit_risk.data import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+from credit_risk.config import CONFIG
+from credit_risk.data.schema import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 
-RANDOM_SEED = 42
 MISSING_CATEGORY = "Missing"
 
-MODEL_BUILDERS: dict[str, Callable[[], ClassifierMixin]] = {
-    "logistic_regression": lambda: LogisticRegression(
+MODEL_BUILDERS: dict[str, Callable[..., ClassifierMixin]] = {
+    "logistic_regression": lambda **params: LogisticRegression(
         max_iter=1000,
         class_weight="balanced",
-        random_state=RANDOM_SEED,
+        random_state=CONFIG.seed,
+        **params,
     ),
-    "random_forest": lambda: RandomForestClassifier(
+    "random_forest": lambda **params: RandomForestClassifier(
         n_estimators=300,
         class_weight="balanced",
-        random_state=RANDOM_SEED,
+        random_state=CONFIG.seed,
+        **params,
     ),
-    "gradient_boosting": lambda: HistGradientBoostingClassifier(
+    "gradient_boosting": lambda **params: HistGradientBoostingClassifier(
         class_weight="balanced",
-        random_state=RANDOM_SEED,
+        random_state=CONFIG.seed,
+        **params,
+    ),
+    "lightgbm": lambda **params: LGBMClassifier(
+        class_weight="balanced",
+        random_state=CONFIG.seed,
+        verbose=-1,
+        **params,
     ),
 }
 
-DEFAULT_MODEL_NAME = "logistic_regression"
+DEFAULT_MODEL_NAME = CONFIG.training.model_name
 
 
 class UnknownModelError(ValueError):
@@ -39,7 +50,10 @@ class UnknownModelError(ValueError):
         super().__init__(f"Unknown model '{model_name}'. Available models: {available}")
 
 
-def build_preprocessor() -> ColumnTransformer:
+def build_preprocessor(
+    numeric_features: list[str] = NUMERIC_FEATURES,
+    categorical_features: list[str] = CATEGORICAL_FEATURES,
+) -> ColumnTransformer:
     numeric_steps = Pipeline(
         [
             ("impute", SimpleImputer(strategy="median")),
@@ -54,18 +68,23 @@ def build_preprocessor() -> ColumnTransformer:
     )
     return ColumnTransformer(
         [
-            ("numeric", numeric_steps, NUMERIC_FEATURES),
-            ("categorical", categorical_steps, CATEGORICAL_FEATURES),
+            ("numeric", numeric_steps, numeric_features),
+            ("categorical", categorical_steps, categorical_features),
         ]
     )
 
 
-def build_model(model_name: str = DEFAULT_MODEL_NAME) -> Pipeline:
+def build_model(
+    model_name: str = DEFAULT_MODEL_NAME,
+    numeric_features: list[str] = NUMERIC_FEATURES,
+    categorical_features: list[str] = CATEGORICAL_FEATURES,
+    params: dict[str, Any] | None = None,
+) -> Pipeline:
     if model_name not in MODEL_BUILDERS:
         raise UnknownModelError(model_name)
     return Pipeline(
         [
-            ("preprocess", build_preprocessor()),
-            ("classifier", MODEL_BUILDERS[model_name]()),
+            ("preprocess", build_preprocessor(numeric_features, categorical_features)),
+            ("classifier", MODEL_BUILDERS[model_name](**(params or {}))),
         ]
     )
