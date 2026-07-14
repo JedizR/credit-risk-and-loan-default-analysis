@@ -54,6 +54,25 @@ def _encoded_names(model: Pipeline) -> list[str]:
     return [name.split("__", 1)[-1] for name in raw_names]
 
 
+def _display_values(model: Pipeline, transformed: np.ndarray) -> np.ndarray:
+    """Undo the scaling for display only.
+
+    SHAP values are computed on the scaled matrix, but a plot axis reading "CreditScore = -1.5"
+    is unreadable. The numeric block is inverted back to real credit scores and incomes; the
+    one-hot columns are already 0/1 and stay as they are.
+    """
+    preprocess = model.named_steps["preprocess"]
+    encoded = preprocess.get_feature_names_out()
+    numeric_columns = [i for i, name in enumerate(encoded) if name.startswith("numeric__")]
+    if not numeric_columns:
+        return transformed
+
+    scaler = preprocess.named_transformers_["numeric"].named_steps["scale"]
+    display = transformed.copy()
+    display[:, numeric_columns] = scaler.inverse_transform(transformed[:, numeric_columns])
+    return display
+
+
 def explain_model(model: Pipeline, features: pd.DataFrame) -> Explanation:
     """SHAP values for a tree model, computed on the transformed feature space."""
     transformed = _transform(model, features)
@@ -73,7 +92,7 @@ def explain_model(model: Pipeline, features: pd.DataFrame) -> Explanation:
         expected = expected[1] if np.ndim(expected) else expected
 
     names = _encoded_names(model)
-    frame = pd.DataFrame(transformed, columns=names, index=features.index)
+    frame = pd.DataFrame(_display_values(model, transformed), columns=names, index=features.index)
     return Explanation(np.asarray(values), frame, names, float(np.ravel(expected)[0]))
 
 
