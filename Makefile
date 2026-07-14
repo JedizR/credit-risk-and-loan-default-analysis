@@ -34,7 +34,8 @@ docker-build:  ## Build the container image
 
 docker-train:  ## Train inside the container, writing results to the host
 	docker run --rm \
-		-v "$(PWD)/data:/app/data:ro" \
+		-v "$(PWD)/data:/app/data" \
+		-v "$(PWD)/data/raw:/app/data/raw:ro" \
 		-v "$(PWD)/models:/app/models" \
 		-v "$(PWD)/reports:/app/reports" \
 		$(IMAGE) train
