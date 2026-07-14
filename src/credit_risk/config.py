@@ -38,6 +38,7 @@ class Training:
     false_rejection_cost: float = 1.0
     optuna_trials: int = 30
     outlier_contamination: float = 0.01
+    autoencoder_bottleneck: int = 3
 
 
 @dataclass(frozen=True)
