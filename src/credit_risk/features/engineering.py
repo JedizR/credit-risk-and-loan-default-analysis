@@ -67,9 +67,11 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
             0, np.nan
         )
 
+        # Kept as a category so it survives a parquet round-trip with the same dtype, exactly
+        # like the source categoricals.
         engineered["credit_band"] = pd.cut(
             features["CreditScore"], bins=CREDIT_BANDS, labels=CREDIT_BAND_LABELS
-        ).astype("object")
+        ).astype("category")
 
         return engineered
 
