@@ -9,6 +9,7 @@ CONFIG_FILE = Path("config.toml")
 class Paths:
     raw_csv: Path = Path("data/raw/loan_risk_prediction_dataset.csv")
     processed_parquet: Path = Path("data/processed/applicants.parquet")
+    preprocessed_parquet: Path = Path("data/preprocessed/applicants.parquet")
     registry_json: Path = Path("data/registry.json")
     model: Path = Path("models/model.joblib")
     metrics: Path = Path("reports/metrics.json")

@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 from credit_risk.anomaly.handling import clean_training_frame  # noqa: E402
 from credit_risk.config import CONFIG  # noqa: E402
+from credit_risk.data.io import load_training_data, write_parquet  # noqa: E402
+from credit_risk.data.quality import frame_hash  # noqa: E402
 from credit_risk.data.schema import TARGET_COLUMN  # noqa: E402
 from credit_risk.error_analysis import (  # noqa: E402
     classify_predictions,
@@ -34,7 +37,11 @@ from credit_risk.explain import (  # noqa: E402
     plot_importance_bar,
     top_features,
 )
-from credit_risk.features.engineering import engineer_features  # noqa: E402
+from credit_risk.features.engineering import (  # noqa: E402
+    ENGINEERED_CATEGORICAL,
+    ENGINEERED_NUMERIC,
+    engineer_features,
+)
 from credit_risk.features.selection import (  # noqa: E402
     candidate_features,
     plot_selection_curve,
@@ -226,3 +233,38 @@ def write_selection_figure(curve: pd.DataFrame, directory: Path | None = None) -
     figure.savefig(path, dpi=110, bbox_inches="tight")
     plt.close(figure)
     return path
+
+
+def write_preprocessed_dataset(
+    frame: pd.DataFrame | None = None,
+    path: Path | None = None,
+    registry_path: Path | None = None,
+) -> pd.DataFrame:
+    """Persist the model-ready frame: the exact input the model pipeline is fitted on.
+
+    Only the *stateless* half of preprocessing is stored. Imputation, scaling and encoding are
+    deliberately left out: they are fitted on the training fold, so a globally fitted version
+    saved here would leak the holdout into the training data. Those steps stay inside the
+    sklearn pipeline, where they are refit per fold.
+    """
+    frame = load_training_data() if frame is None else frame
+    path = path or CONFIG.paths.preprocessed_parquet
+
+    engineered = engineer_features(frame)
+    write_parquet(engineered, path)
+    _record_preprocessed(engineered, path, registry_path or CONFIG.paths.registry_json)
+    return engineered
+
+
+def _record_preprocessed(engineered: pd.DataFrame, path: Path, registry_path: Path) -> None:
+    """Add the model-ready dataset to the provenance record without dropping what is there."""
+    registry = json.loads(registry_path.read_text()) if registry_path.exists() else {}
+
+    registry["preprocessed_parquet"] = Path(path).as_posix()
+    registry["preprocessed_sha256"] = frame_hash(engineered)
+    registry["preprocessed_rows"] = int(len(engineered))
+    registry["preprocessed_columns"] = int(engineered.shape[1])
+    registry["engineered_features"] = ENGINEERED_NUMERIC + ENGINEERED_CATEGORICAL
+
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    registry_path.write_text(json.dumps(registry, indent=2) + "\n")

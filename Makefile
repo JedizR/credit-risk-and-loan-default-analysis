@@ -1,5 +1,6 @@
-.PHONY: help setup lint test prepare train eval predict explain \
-	docker-build docker-prepare docker-train docker-eval docker-predict docker-explain clean
+.PHONY: help setup lint test prepare preprocess train eval predict explain \
+	docker-build docker-prepare docker-preprocess docker-train docker-eval docker-predict \
+	docker-explain clean
 
 IMAGE := credit-risk
 APPLICANTS := data/raw/loan_risk_prediction_dataset.csv
@@ -46,6 +47,9 @@ test:  ## Run the test suite with coverage
 prepare:  ## Repair and convert the raw CSV to a typed parquet dataset
 	uv run credit-risk prepare
 
+preprocess:  ## Engineer the features and save the model-ready parquet
+	uv run credit-risk preprocess
+
 train: | $(ARTEFACT_DIRS)  ## Train: make train MODEL=lightgbm PLOT=true TUNE=true
 	uv run credit-risk train $(TRAIN_FLAGS)
 
@@ -63,6 +67,9 @@ docker-build:  ## Build the container image
 
 docker-prepare: | $(ARTEFACT_DIRS)  ## Build the typed dataset inside the container
 	$(DOCKER_RUN) prepare
+
+docker-preprocess: | $(ARTEFACT_DIRS)  ## Save the model-ready dataset inside the container
+	$(DOCKER_RUN) preprocess
 
 docker-train: | $(ARTEFACT_DIRS)  ## Train in the container: make docker-train MODEL=lightgbm PLOT=true
 	$(DOCKER_RUN) train $(TRAIN_FLAGS)

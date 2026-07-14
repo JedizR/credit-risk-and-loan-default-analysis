@@ -22,7 +22,7 @@ from credit_risk.train import (
     score_model,
     split_holdout,
 )
-from credit_risk.workflow import TrainingOptions, run_training
+from credit_risk.workflow import TrainingOptions, run_training, write_preprocessed_dataset
 
 DEFAULT_MODEL_PATH = CONFIG.paths.model
 DEFAULT_METRICS_PATH = CONFIG.paths.metrics
@@ -38,6 +38,15 @@ def run_prepare(_args: argparse.Namespace) -> None:
     frame = prepare_dataset()
     print(f"Prepared {len(frame)} applicants written to {PROCESSED_PARQUET}")
     print(f"Provenance written to {REGISTRY_JSON}")
+
+
+def run_preprocess(args: argparse.Namespace) -> None:
+    engineered = write_preprocessed_dataset(path=args.output_path)
+    output = args.output_path or CONFIG.paths.preprocessed_parquet
+
+    print(f"Preprocessed {len(engineered)} applicants into {engineered.shape[1]} columns")
+    print(f"Model-ready dataset written to {output}")
+    print(f"Provenance updated in {REGISTRY_JSON}")
 
 
 def run_train(args: argparse.Namespace) -> None:
@@ -122,6 +131,12 @@ def build_parser() -> argparse.ArgumentParser:
         "prepare", help="Repair and convert the raw CSV to a typed parquet dataset"
     )
     prepare.set_defaults(handler=run_prepare)
+
+    preprocess = subcommands.add_parser(
+        "preprocess", help="Engineer the features and save the model-ready dataset"
+    )
+    preprocess.add_argument("--output-path", type=Path, default=None)
+    preprocess.set_defaults(handler=run_preprocess)
 
     train = subcommands.add_parser("train", help="Run the full training pipeline")
     train.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
