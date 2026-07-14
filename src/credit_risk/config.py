@@ -22,6 +22,7 @@ class Thresholds:
 
     low_credit_score: float = 580.0
     low_income: float = 40_000.0
+    max_debt_to_income: float = 5.0
     informative_missing_delta: float = 0.05
     signal_mutual_info: float = 0.01
 

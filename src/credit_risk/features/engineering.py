@@ -45,8 +45,12 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
         employed = features["EmploymentType"].ne("Unemployed").astype(int)
         engineered["is_unemployed"] = 1 - employed
 
+        # A missing score is not "unknown": those applicants approve at 2.1%, below even the
+        # worst observed band, so missingness is folded into the low-score flag rather than
+        # being silently treated as "not low".
         engineered["low_credit_score"] = (
-            features["CreditScore"] < CONFIG.thresholds.low_credit_score
+            features["CreditScore"].isna()
+            | (features["CreditScore"] < CONFIG.thresholds.low_credit_score)
         ).astype(int)
         engineered["low_income"] = (features["Income"] < CONFIG.thresholds.low_income).astype(int)
 
@@ -54,7 +58,11 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
         engineered["credit_score_x_employed"] = features["CreditScore"] * employed
         engineered["income_x_employed"] = features["Income"] * employed
 
-        engineered["debt_to_income"] = features["LoanAmount"] / features["Income"].clip(lower=1.0)
+        # A handful of near-zero incomes send this ratio into the hundreds, which would
+        # dominate the scaler. Cap it: past the cap the applicant is already maximally indebted.
+        engineered["debt_to_income"] = (
+            features["LoanAmount"] / features["Income"].clip(lower=1.0)
+        ).clip(upper=CONFIG.thresholds.max_debt_to_income)
         engineered["experience_per_age"] = features["YearsExperience"] / features["Age"].replace(
             0, np.nan
         )
