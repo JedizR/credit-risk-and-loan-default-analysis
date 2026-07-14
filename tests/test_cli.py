@@ -182,3 +182,13 @@ def test_explain_emits_a_reason_for_every_applicant(
     assert len(decisions) == 25
     assert set(decisions.columns) == {"decision", "probability", "reasons"}
     assert decisions["reasons"].str.len().gt(0).all()
+
+
+def test_preprocess_writes_the_model_ready_dataset(tmp_path: Path) -> None:
+    output = tmp_path / "preprocessed" / "applicants.parquet"
+
+    _run(["preprocess", "--output-path", str(output)])
+
+    engineered = pd.read_parquet(output)
+    assert "credit_score_x_employed" in engineered.columns
+    assert len(engineered) > 0

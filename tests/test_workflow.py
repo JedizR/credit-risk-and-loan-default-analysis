@@ -1,6 +1,9 @@
+import json
+
 import pandas as pd
 
 from credit_risk.config import CONFIG
+from credit_risk.data.schema import TARGET_COLUMN
 from credit_risk.workflow import TrainingOptions, TrainingOutcome, run_training
 
 
@@ -65,3 +68,55 @@ def test_plots_are_written_to_the_reports_directory(sample_frame: pd.DataFrame, 
     assert all(path.exists() for path in outcome.figures)
     assert any("explain_beeswarm" in path.name for path in outcome.figures)
     assert any("errors_" in path.name for path in outcome.figures)
+
+
+def test_preprocessed_dataset_is_the_model_ready_frame(
+    sample_frame: pd.DataFrame, tmp_path
+) -> None:
+    from credit_risk.features.engineering import ENGINEERED_CATEGORICAL, ENGINEERED_NUMERIC
+    from credit_risk.workflow import write_preprocessed_dataset
+
+    path = tmp_path / "preprocessed" / "applicants.parquet"
+
+    engineered = write_preprocessed_dataset(sample_frame, path)
+
+    assert path.exists()
+    restored = pd.read_parquet(path)
+    assert set(ENGINEERED_NUMERIC + ENGINEERED_CATEGORICAL).issubset(restored.columns)
+    assert TARGET_COLUMN in restored.columns
+    assert len(restored) == len(sample_frame)
+    assert restored.dtypes.to_dict() == engineered.dtypes.to_dict()
+
+
+def test_preprocessing_adds_to_provenance_without_dropping_it(
+    sample_frame: pd.DataFrame, tmp_path
+) -> None:
+    from credit_risk.workflow import write_preprocessed_dataset
+
+    registry = tmp_path / "registry.json"
+    registry.write_text(json.dumps({"raw_sha256": "kept", "processed_sha256": "kept"}))
+
+    write_preprocessed_dataset(sample_frame, tmp_path / "applicants.parquet", registry)
+
+    after = json.loads(registry.read_text())
+    # The earlier stages must survive: the record is merged, not overwritten.
+    assert after["raw_sha256"] == "kept"
+    assert after["processed_sha256"] == "kept"
+    assert len(after["preprocessed_sha256"]) == 64
+    assert after["preprocessed_rows"] == len(sample_frame)
+
+
+def test_preprocessing_never_touches_the_project_registry(
+    sample_frame: pd.DataFrame, tmp_path
+) -> None:
+    from credit_risk.workflow import write_preprocessed_dataset
+
+    project_registry = CONFIG.paths.registry_json
+    before = project_registry.read_text() if project_registry.exists() else None
+
+    write_preprocessed_dataset(
+        sample_frame, tmp_path / "applicants.parquet", tmp_path / "registry.json"
+    )
+
+    after = project_registry.read_text() if project_registry.exists() else None
+    assert after == before
