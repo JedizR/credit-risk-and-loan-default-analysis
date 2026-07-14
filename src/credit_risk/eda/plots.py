@@ -22,6 +22,7 @@ def plot_numeric_distributions(
         axis.set_title(column)
         axis.set_xlabel("")
     fig.tight_layout()
+    plt.close(fig)
     return fig
 
 
@@ -35,6 +36,7 @@ def plot_categorical_counts(
         axis.set_title(column)
         axis.set_ylabel("")
     fig.tight_layout()
+    plt.close(fig)
     return fig
 
 
@@ -46,6 +48,7 @@ def plot_missingness(frame: pd.DataFrame) -> Figure:
     axis.bar_label(axis.containers[0], fmt="%.1f%%", padding=3)
     axis.set(xlabel="missing (%)", ylabel="", title="Missing values by column")
     fig.tight_layout()
+    plt.close(fig)
     return fig
 
 
@@ -62,6 +65,7 @@ def plot_missingness_mechanism(frame: pd.DataFrame, target: str = TARGET_COLUMN)
         axis.set_ylabel("approval rate")
     fig.suptitle("Approval rate: value present vs missing (dashed = base rate)")
     fig.tight_layout()
+    plt.close(fig)
     return fig
 
 
@@ -73,6 +77,7 @@ def plot_boxplots_by_target(
         sns.boxplot(data=frame, x=target, y=column, hue=target, legend=False, ax=axis)
         axis.set_xlabel("")
     fig.tight_layout()
+    plt.close(fig)
     return fig
 
 
@@ -96,6 +101,7 @@ def plot_correlation_heatmaps(
         )
         axis.set_title(f"{method.title()} correlation")
     fig.tight_layout()
+    plt.close(fig)
     return fig
 
 
@@ -110,6 +116,7 @@ def plot_approval_rate_by_category(
         axis.axvline(base_rate, color="black", linestyle="--", linewidth=1)
         axis.set(xlabel="approval rate", ylabel="", title=column)
     fig.tight_layout()
+    plt.close(fig)
     return fig
 
 
@@ -138,6 +145,7 @@ def plot_tsne(
     axis.legend(title=target)
     axis.set_title("t-SNE of applicants (mixed features standardized)")
     fig.tight_layout()
+    plt.close(fig)
     return fig
 
 
@@ -152,4 +160,5 @@ def plot_pca_scree(frame: pd.DataFrame, columns: list[str] = NUMERIC_FEATURES) -
     axis.set(xlabel="component", ylabel="explained variance", title="PCA scree (numeric features)")
     axis.legend()
     fig.tight_layout()
+    plt.close(fig)
     return fig

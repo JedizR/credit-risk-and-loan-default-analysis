@@ -199,4 +199,5 @@ def plot_selection_curve(curve: pd.DataFrame, selected: int | None = None) -> Fi
     )
     axis.legend()
     figure.tight_layout()
+    plt.close(figure)
     return figure

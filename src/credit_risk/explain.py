@@ -88,6 +88,7 @@ def plot_beeswarm(explanation: Explanation, max_display: int = 15) -> Figure:
         show=False,
     )
     plt.tight_layout()
+    plt.close(figure)
     return figure
 
 
@@ -102,6 +103,7 @@ def plot_importance_bar(explanation: Explanation, max_display: int = 15) -> Figu
         show=False,
     )
     plt.tight_layout()
+    plt.close(figure)
     return figure
 
 
@@ -126,6 +128,7 @@ def plot_dependence(
     figure = plt.gcf()
     figure.set_size_inches(7.5, 5)
     plt.tight_layout()
+    plt.close(figure)
     return figure
 
 
