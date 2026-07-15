@@ -1,54 +1,17 @@
-from collections.abc import Callable
 from typing import Any
 
-from lightgbm import LGBMClassifier
-from sklearn.base import ClassifierMixin
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from credit_risk.config import CONFIG
 from credit_risk.data.schema import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 from credit_risk.features.autoencoder import AutoencoderFeatures
+from credit_risk.models import get_model
 
 MISSING_CATEGORY = "Missing"
-
-MODEL_BUILDERS: dict[str, Callable[..., ClassifierMixin]] = {
-    "logistic_regression": lambda **params: LogisticRegression(
-        max_iter=1000,
-        class_weight="balanced",
-        random_state=CONFIG.seed,
-        **params,
-    ),
-    "random_forest": lambda **params: RandomForestClassifier(
-        n_estimators=300,
-        class_weight="balanced",
-        random_state=CONFIG.seed,
-        **params,
-    ),
-    "gradient_boosting": lambda **params: HistGradientBoostingClassifier(
-        class_weight="balanced",
-        random_state=CONFIG.seed,
-        **params,
-    ),
-    "lightgbm": lambda **params: LGBMClassifier(
-        class_weight="balanced",
-        random_state=CONFIG.seed,
-        verbose=-1,
-        **params,
-    ),
-}
-
 DEFAULT_MODEL_NAME = CONFIG.training.model_name
-
-
-class UnknownModelError(ValueError):
-    def __init__(self, model_name: str) -> None:
-        available = ", ".join(sorted(MODEL_BUILDERS))
-        super().__init__(f"Unknown model '{model_name}'. Available models: {available}")
 
 
 def build_preprocessor(
@@ -95,15 +58,13 @@ def build_model(
     params: dict[str, Any] | None = None,
     autoencoder_bottleneck: int | None = None,
 ) -> Pipeline:
-    if model_name not in MODEL_BUILDERS:
-        raise UnknownModelError(model_name)
-
+    classifier = get_model(model_name).build_estimator(**(params or {}))
     return Pipeline(
         [
             (
                 "preprocess",
                 build_preprocessor(numeric_features, categorical_features, autoencoder_bottleneck),
             ),
-            ("classifier", MODEL_BUILDERS[model_name](**(params or {}))),
+            ("classifier", classifier),
         ]
     )

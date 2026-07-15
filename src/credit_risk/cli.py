@@ -13,7 +13,8 @@ from credit_risk.data import (
 )
 from credit_risk.explain import decision_reasons
 from credit_risk.features.engineering import engineer_features
-from credit_risk.pipeline import DEFAULT_MODEL_NAME, MODEL_BUILDERS
+from credit_risk.models import MODELS
+from credit_risk.pipeline import DEFAULT_MODEL_NAME
 from credit_risk.train import (
     load_model,
     predict_applicants,
@@ -177,7 +178,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     train = subcommands.add_parser("train", help="Run the full training pipeline")
     train.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
-    train.add_argument("--model-name", choices=sorted(MODEL_BUILDERS), default=DEFAULT_MODEL_NAME)
+    train.add_argument("--model-name", choices=sorted(MODELS), default=DEFAULT_MODEL_NAME)
     train.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
     train.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
     train.add_argument("--figures-path", type=Path, default=None)

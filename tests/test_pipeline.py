@@ -3,12 +3,8 @@ import pandas as pd
 import pytest
 
 from credit_risk.data import FEATURE_COLUMNS
-from credit_risk.pipeline import (
-    MODEL_BUILDERS,
-    UnknownModelError,
-    build_model,
-    build_preprocessor,
-)
+from credit_risk.models import MODELS, UnknownModelError
+from credit_risk.pipeline import build_model, build_preprocessor
 
 
 def test_preprocessor_leaves_no_missing_values(sample_frame: pd.DataFrame) -> None:
@@ -30,7 +26,7 @@ def test_preprocessor_encodes_missing_education_as_its_own_category(
     assert any("Education_Missing" in name for name in encoded_names)
 
 
-@pytest.mark.parametrize("model_name", sorted(MODEL_BUILDERS))
+@pytest.mark.parametrize("model_name", sorted(MODELS))
 def test_every_registered_model_fits_and_scores(
     model_name: str, sample_frame: pd.DataFrame
 ) -> None:
