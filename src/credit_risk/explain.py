@@ -115,6 +115,7 @@ def plot_beeswarm(explanation: Explanation, max_display: int = 15) -> Figure:
 
 
 def plot_importance_bar(explanation: Explanation, max_display: int = 15) -> Figure:
+    """Mean absolute SHAP per feature, as a ranked bar chart."""
     figure = plt.figure()
     shap.summary_plot(
         explanation.values,
@@ -157,6 +158,7 @@ def plot_dependence(
 
 
 def global_importance(explanation: Explanation) -> pd.Series:
+    """Mean |SHAP| per feature, ranked descending — the global importance ordering."""
     mean_absolute = np.abs(explanation.values).mean(axis=0)
     return (
         pd.Series(mean_absolute, index=explanation.feature_names)

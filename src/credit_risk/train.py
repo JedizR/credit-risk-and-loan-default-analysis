@@ -26,6 +26,8 @@ from credit_risk.pipeline import DEFAULT_MODEL_NAME, build_model
 
 @dataclass(frozen=True)
 class HoldoutSplit:
+    """The train and holdout features and targets, bundled as one value."""
+
     train_features: pd.DataFrame
     holdout_features: pd.DataFrame
     train_target: pd.Series
@@ -43,6 +45,7 @@ def split_frame(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def split_holdout(frame: pd.DataFrame, feature_columns: list[str] | None = None) -> HoldoutSplit:
+    """Split a frame and wrap the feature and target halves in a ``HoldoutSplit``."""
     train_frame, holdout_frame = split_frame(frame)
     columns = feature_columns or [column for column in frame.columns if column != TARGET_COLUMN]
     return HoldoutSplit(
@@ -59,6 +62,18 @@ def score_model(
     target: pd.Series,
     threshold: float | None = None,
 ) -> dict[str, float]:
+    """Compute every headline metric at a decision threshold.
+
+    Args:
+        model: A fitted pipeline.
+        features: The features to score.
+        target: The true labels aligned to ``features``.
+        threshold: The decision threshold, or None for the configured default.
+
+    Returns:
+        A dict of PR-AUC, ROC-AUC, Brier, precision/recall/F1, accuracy, the threshold used, and
+        the four confusion-matrix counts.
+    """
     threshold = CONFIG.training.decision_threshold if threshold is None else threshold
     approval_probabilities = model.predict_proba(features)[:, 1]
     predictions = (approval_probabilities >= threshold).astype(int)
@@ -98,6 +113,7 @@ def train_model(
     params: dict[str, Any] | None = None,
     threshold: float | None = None,
 ) -> tuple[Pipeline, dict[str, float]]:
+    """Split, build, fit and score in one call — the compact train path used in tests."""
     split = split_holdout(frame, numeric_features + categorical_features)
     model = build_model(model_name, numeric_features, categorical_features, params)
     model.fit(split.train_features, split.train_target)
@@ -106,15 +122,18 @@ def train_model(
 
 
 def save_model(model: Pipeline, model_path: Path) -> None:
+    """Persist a fitted pipeline to ``model_path`` with joblib, creating the parent directory."""
     model_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, model_path)
 
 
 def load_model(model_path: Path) -> Pipeline:
+    """Load a joblib-persisted pipeline."""
     return joblib.load(model_path)
 
 
 def save_metrics(metrics: dict[str, float], metrics_path: Path) -> None:
+    """Write the metrics dict to ``metrics_path`` as indented JSON."""
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
     metrics_path.write_text(json.dumps(metrics, indent=2) + "\n")
 
@@ -122,6 +141,7 @@ def save_metrics(metrics: dict[str, float], metrics_path: Path) -> None:
 def predict_applicants(
     model: Pipeline, features: pd.DataFrame, threshold: float | None = None
 ) -> pd.DataFrame:
+    """Score applicants into a copy of ``features`` with probability and decision columns."""
     threshold = CONFIG.training.decision_threshold if threshold is None else threshold
     approval_probabilities = model.predict_proba(features)[:, 1]
     return features.assign(

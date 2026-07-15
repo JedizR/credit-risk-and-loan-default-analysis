@@ -60,6 +60,7 @@ def get_detector(name: str) -> AnomalyDetector:
 
 
 def build_detector(detector_name: str, contamination: float | None = None) -> OutlierMixin:
+    """Build a registered detector at the given (or configured default) contamination."""
     contamination = contamination or CONFIG.training.outlier_contamination
     return get_detector(detector_name).build(contamination)
 
@@ -73,6 +74,7 @@ def encode_for_detection(frame: pd.DataFrame) -> np.ndarray:
 def detect_outliers(
     frame: pd.DataFrame, detector_name: str, contamination: float | None = None
 ) -> pd.Series:
+    """Fit one detector on the encoded frame and return an index-aligned boolean mask."""
     detector = build_detector(detector_name, contamination)
     encoded = encode_for_detection(frame)
     flags = detector.fit_predict(encoded) == -1

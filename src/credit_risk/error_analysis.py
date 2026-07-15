@@ -44,6 +44,7 @@ def classify_predictions(
 
 
 def error_summary(classified: pd.DataFrame) -> pd.DataFrame:
+    """Counts, shares and mean probability for each outcome kind (TN/FP/FN/TP)."""
     counts = classified["outcome"].value_counts().reindex(ERROR_KINDS, fill_value=0)
     summary = pd.DataFrame({"count": counts})
     summary["share_pct"] = (summary["count"] / len(classified) * 100).round(2)
@@ -98,6 +99,7 @@ def confident_mistakes(classified: pd.DataFrame, count: int = 10) -> pd.DataFram
 
 
 def plot_error_overview(classified: pd.DataFrame) -> Figure:
+    """Outcome counts and the predicted-probability distribution, errors vs correct."""
     figure, (outcome_axis, probability_axis) = plt.subplots(1, 2, figsize=(13, 4.5))
 
     counts = classified["outcome"].value_counts().reindex(ERROR_KINDS, fill_value=0)
@@ -125,6 +127,7 @@ def plot_error_overview(classified: pd.DataFrame) -> Figure:
 
 
 def plot_error_rate_by_segment(classified: pd.DataFrame, columns: list[str]) -> Figure:
+    """Error rate per group for each segment column, against the population average."""
     figure, axes = plt.subplots(1, len(columns), figsize=(5.5 * len(columns), 4))
     for column, axis in zip(columns, np.atleast_1d(axes), strict=True):
         rates = error_rate_by_segment(classified, column)["error_rate"]
