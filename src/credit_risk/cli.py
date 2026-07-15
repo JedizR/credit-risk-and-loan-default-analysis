@@ -53,6 +53,10 @@ def run_preprocess(args: argparse.Namespace) -> None:
 
     print(f"Preprocessed {len(engineered)} applicants into {engineered.shape[1]} columns")
     print(f"Model-ready dataset written to {output}")
+    print(
+        "Numeric nulls are kept on purpose: the imputer is fitted per fold inside the model "
+        "pipeline, so baking values in here would leak the holdout into training."
+    )
     print(f"Provenance updated in {registry}")
 
 
