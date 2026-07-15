@@ -12,8 +12,8 @@ The data moves through three stages, each stored as a typed parquet and hashed i
 | Stage | Path | What it holds |
 | --- | --- | --- |
 | raw | `data/raw/*.csv` | the original file, never modified |
-| processed | `data/processed/applicants.parquet` | `make prepare` — impossible values repaired, dtypes fixed |
-| preprocessed | `data/preprocessed/applicants.parquet` | `make preprocess` — the model-ready frame, with the engineered features |
+| processed | `data/processed/applicants.parquet` | `credit-risk prepare` — impossible values repaired, dtypes fixed |
+| preprocessed | `data/preprocessed/applicants.parquet` | `credit-risk preprocess` — the model-ready frame, with the engineered features |
 
 The preprocessed parquet is the exact input the model pipeline is fitted on. Only the
 *stateless* half of preprocessing is stored there: imputation, scaling and encoding are
@@ -41,38 +41,39 @@ make setup
 
 ## Usage
 
-```bash
-make prepare                        # repair impossible values, write the typed parquet
-make preprocess                     # engineer the features, write the model-ready parquet
-make train                          # full pipeline: outliers, selection, tuning, threshold
-make train MODEL=random_forest      # train a different model
-make train PLOT=true                # also write every figure to reports/figures/
-make eval                           # score the saved model on the held-out 20%
-make predict APPLICANTS=new.csv     # score new applicants into out/predictions.csv
-make explain APPLICANTS=new.csv     # score them with a readable reason per decision
-make lint                           # ruff check + format check
-make test                           # pytest with coverage
-```
-
-`make train` runs the same pipeline the modelling notebook does: engineer features, drop
-consensus outliers from the training rows, select a feature set, search hyperparameters with
-Optuna, choose the decision threshold by expected cost, and score once on the holdout. Each
-stage can be switched off:
+`credit-risk` is the single entry point. Its `run` command executes the whole pipeline, or one
+stage:
 
 ```bash
-make train TUNE=false SELECT=false REMOVE_OUTLIERS=false   # plain fit, no pipeline steps
-make train TRIALS=100                                      # a longer Optuna search
+uv run credit-risk run                                     # prepare -> preprocess -> train -> evaluate
+uv run credit-risk run --stage train                       # one stage only
+uv run credit-risk run --tune --select-features --plots     # full pipeline, tuned, every figure written
+uv run credit-risk run --stage train --model-name random_forest
 ```
 
-The CLI takes the same work directly:
+The full run engineers features, drops consensus outliers from the training rows, selects a feature
+set, searches hyperparameters with Optuna (`--tune`), chooses the decision threshold by expected
+cost, and scores once on the holdout. Outlier removal is on by default; `--keep-outliers` turns it
+off. `--stage` restricts the run to a single step (`prepare`, `preprocess`, `train` or `evaluate`).
+
+Each stage is also its own subcommand, and scoring new applicants has two more:
 
 ```bash
 uv run credit-risk train --model-name lightgbm --tune --select-features --plots
+uv run credit-risk predict --input-path new.csv --output-path out/predictions.csv
 uv run credit-risk explain --input-path new.csv --output-path out/decisions.csv
 ```
 
 Available models: `lightgbm` (default), `logistic_regression`, `random_forest`,
 `gradient_boosting`.
+
+Development tasks stay in the Makefile:
+
+```bash
+make setup    # install the locked environment and the git hooks
+make lint     # ruff check + format check
+make test     # pytest with coverage
+```
 
 ## Configuration
 
@@ -113,24 +114,23 @@ The image ships the CLI as its entry point, so anything after the image name is 
 straight to `credit-risk`. Data and artefacts are mounted rather than baked in.
 
 ```bash
-make docker-build                            # build the image
-make docker-prepare                          # build the typed dataset in the container
-make docker-train MODEL=lightgbm PLOT=true   # full pipeline, figures written to the host
-make docker-eval                             # evaluate the saved model
-make docker-predict                          # score APPLICANTS into out/
-make docker-explain                          # decisions with reasons into out/
+make docker-build                                        # build the image
+make docker-run                                          # full pipeline in the container (run --stage all)
+make docker-run ARGS="run --stage train --tune --plots"  # a specific run, figures written to the host
+make docker-run ARGS="predict --input-path new.csv"      # score new applicants into out/
 ```
 
-The whole pipeline runs in the container, and results land on the host:
+`docker-run` passes `ARGS` straight to `credit-risk` inside the container and mounts the data and
+artefact directories, so the whole pipeline runs in the container and results land on the host:
 
 | Mount | Mode | Contents |
 | --- | --- | --- |
 | `data/raw` | read-only | the immutable source dataset |
 | `data/` | read-write | derived parquet and provenance |
 | `models/`, `out/` | read-write | model artefact, predictions and decisions |
-| `reports/` | read-write | `metrics.json`, and `figures/` when `PLOT=true` |
+| `reports/` | read-write | `metrics.json`, and `figures/` when `--plots` is passed |
 
-With `PLOT=true` the container writes the model dynamics (learning curve, ROC/PR, calibration),
+With `--plots` the container writes the model dynamics (learning curve, ROC/PR, calibration),
 the evaluation (confusion matrix, threshold cost), the tuning history, the SHAP explanations
 (beeswarm, importance, dependence) and the error analysis into `reports/figures/`.
 
