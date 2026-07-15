@@ -19,6 +19,13 @@ def build_preprocessor(
     categorical_features: list[str] | None = None,
     autoencoder_bottleneck: int | None = None,
 ) -> ColumnTransformer:
+    """Build the learned preprocessing: impute+scale numerics, impute+one-hot categoricals.
+
+    A selected subset may contain no columns of one kind, so an empty branch is skipped rather than
+    added (it would otherwise fail to fit). When ``autoencoder_bottleneck`` is set, an autoencoder
+    embedding of the numeric columns is added as an *extra* view alongside them, not a replacement.
+    Everything here is learned, so it is refit inside every cross-validation fold.
+    """
     numeric_features = NUMERIC_FEATURES if numeric_features is None else numeric_features
     categorical_features = (
         CATEGORICAL_FEATURES if categorical_features is None else categorical_features
@@ -37,13 +44,11 @@ def build_preprocessor(
         ]
     )
 
-    # A selected subset may contain no columns of one kind; an empty branch would fail to fit.
     transformers = []
     if numeric_features:
         transformers.append(("numeric", numeric_steps, numeric_features))
     if categorical_features:
         transformers.append(("categorical", categorical_steps, categorical_features))
-    # The embedding is an extra view of the same numeric columns, not a replacement for them.
     if autoencoder_bottleneck and numeric_features:
         transformers.append(
             ("autoencoder", AutoencoderFeatures(autoencoder_bottleneck), numeric_features)
@@ -58,6 +63,21 @@ def build_model(
     params: dict[str, Any] | None = None,
     autoencoder_bottleneck: int | None = None,
 ) -> Pipeline:
+    """Assemble the full model: the preprocessor followed by the chosen classifier.
+
+    Args:
+        model_name: A registered model name (see ``credit_risk.models``).
+        numeric_features: Numeric columns for the preprocessor, or None for the schema default.
+        categorical_features: Categorical columns, or None for the schema default.
+        params: Classifier hyperparameters, e.g. an Optuna study's best params.
+        autoencoder_bottleneck: If set, add an autoencoder embedding branch of that width.
+
+    Returns:
+        An unfitted scikit-learn ``Pipeline`` of preprocessing then classifier.
+
+    Raises:
+        UnknownModelError: If ``model_name`` is not registered.
+    """
     classifier = get_model(model_name).build_estimator(**(params or {}))
     return Pipeline(
         [

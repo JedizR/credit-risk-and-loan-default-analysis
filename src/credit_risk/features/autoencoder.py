@@ -75,9 +75,12 @@ def autoencoder_verdict(
 
     The embedding is only worth its complexity if it beats the engineered features it is added
     to. Anything inside one standard error is a tie, and a tie loses: the simpler model wins.
+
+    Note:
+        ``cross_validated_score`` and ``DEFAULT_MODEL_NAME`` are imported inside the function, not
+        at module scope: ``pipeline`` imports this module for the optional embedding branch, so
+        importing it back at the top would form a cycle.
     """
-    # Imported here, not at module scope: pipeline.py imports this module to offer the optional
-    # embedding branch, so importing it back at the top would be a cycle.
     from credit_risk.evaluation import cross_validated_score
     from credit_risk.pipeline import DEFAULT_MODEL_NAME
 
