@@ -1,11 +1,13 @@
 import pandas as pd
 import pytest
 
+from credit_risk.anomaly.base import AnomalyDetector
 from credit_risk.anomaly.detectors import (
-    DETECTOR_BUILDERS,
+    DETECTORS,
     UnknownDetectorError,
     build_detector,
     detect_outliers,
+    get_detector,
 )
 from credit_risk.anomaly.handling import (
     all_outlier_flags,
@@ -26,7 +28,14 @@ def test_build_detector_rejects_unknown_name() -> None:
         build_detector("autoencoder")
 
 
-@pytest.mark.parametrize("detector_name", sorted(DETECTOR_BUILDERS))
+def test_registry_holds_anomaly_detectors() -> None:
+    assert set(DETECTORS) == {"isolation_forest", "one_class_svm"}
+    for name, detector in DETECTORS.items():
+        assert isinstance(detector, AnomalyDetector)
+        assert get_detector(name) is detector
+
+
+@pytest.mark.parametrize("detector_name", sorted(DETECTORS))
 def test_every_detector_returns_an_index_aligned_mask(
     detector_name: str, sample_frame: pd.DataFrame
 ) -> None:
@@ -66,7 +75,7 @@ def test_iqr_and_zscore_flags_are_boolean_and_aligned(sample_frame: pd.DataFrame
 def test_all_outlier_flags_has_one_column_per_method(sample_frame: pd.DataFrame) -> None:
     flags = all_outlier_flags(sample_frame, contamination=0.05)
 
-    assert set(flags.columns) == {"impossible", "iqr", "zscore", *DETECTOR_BUILDERS}
+    assert set(flags.columns) == {"impossible", "iqr", "zscore", *DETECTORS}
 
 
 def test_summary_reports_counts_and_approval_lift(sample_frame: pd.DataFrame) -> None:
