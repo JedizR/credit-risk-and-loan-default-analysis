@@ -134,6 +134,12 @@ A bare `docker run --rm credit-risk` prints the CLI help — the smoke test CI r
 pull request. Tagging a release on `main` publishes the image to
 `ghcr.io/jedizr/credit-risk-and-loan-default-analysis`.
 
+The runtime image (~1.38 GB) carries only what the CLI needs. Notebook-only tools stay in the
+`dev` dependency group and never enter it — `duckdb`, for example, backs the exploratory `query`
+helper and is imported lazily, so it ships with `uv sync --all-groups` for the notebooks but not
+with the image. The bulk of the size is the model and explainability stack (`scikit-learn`,
+`lightgbm`, `pyarrow`, and `shap` with its `numba` compiler), each of which a CLI command uses.
+
 ## Layout
 
 ```
