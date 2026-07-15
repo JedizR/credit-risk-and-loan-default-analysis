@@ -168,6 +168,32 @@ notebooks/          01 exploratory analysis, 02 modelling
 Notebooks contain no function definitions: they import from `credit_risk` and narrate, so the
 notebook, the CLI and the container all run the same code.
 
+## Design
+
+A handful of patterns, each chosen for the smell it removes rather than for its name:
+
+- **Registry / Simple Factory** — `MODELS`/`get_model` (and `DETECTORS`/`get_detector`, and the
+  CLI's stage dispatch) pick an implementation by a runtime string, so adding a model or detector is
+  one dict entry, not an `if/elif` in three files.
+- **Strategy behind an abstract base** — `CreditModel` (and `AnomalyDetector`) is an ABC defining
+  the contract (`build_estimator` + `search_space`); the four models are interchangeable strategies,
+  and a future hand-written model implements the ABC and drops into the registry.
+- **Adapter** — `AutoencoderFeatures` wraps an sklearn `MLPRegressor` in the transformer interface,
+  so the pipeline treats it like any other preprocessing block.
+- **Composite** — the sklearn `Pipeline` composes preprocessing and the classifier into one
+  estimator that is fitted, scored and persisted as a unit.
+- **Value Object** — `HoldoutSplit`, `TrainingOptions`, `TrainingOutcome`, `Explanation` and
+  `RunRecord` bundle related fields, so functions take one typed value instead of a long argument
+  list and no caller passes bare booleans.
+
+Two patterns were considered and **rejected on purpose**:
+
+- **Factory Method** (an abstract *creator* subclass per product) — the models are sklearn
+  estimators sharing one interface, chosen by a config string, never by a subclass; five creator
+  classes to replace a one-line registry is speculative generality.
+- **One abstract class per model** — an abstract class with a single implementation is the same
+  smell. `CreditModel` is *one* abstract base with four concrete subclasses, not five abstract ones.
+
 ## Contributing
 
 Gitflow: branch `feature/*` off `develop`, rebase onto `develop`, open a pull request. `main` holds releases only, tagged `vMAJOR.MINOR.PATCH`.
