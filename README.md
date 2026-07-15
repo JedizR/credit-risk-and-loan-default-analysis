@@ -21,6 +21,10 @@ deliberately left out, because they are fitted per training fold — a globally 
 saved to disk would leak the holdout into the training data. Those steps stay inside the
 sklearn pipeline.
 
+So the parquet still shows nulls in `Income`, `CreditScore` and the features derived from them.
+That is expected, not a bug: the classifier never sees a NaN, because the pipeline imputes each
+fold as it is fitted.
+
 Three properties drive the modelling choices:
 
 - **Imbalanced target.** 23% of applicants are approved, so accuracy is misleading — a model that rejects everyone scores 77%. Average precision (PR-AUC) is the headline metric, and every model trains with balanced class weights.
