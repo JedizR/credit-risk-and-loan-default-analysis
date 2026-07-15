@@ -37,6 +37,21 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, features: pd.DataFrame) -> pd.DataFrame:
+        """Add the engineered columns to a copy of the frame.
+
+        Each engineered feature encodes something the exploratory analysis found:
+
+        - ``low_credit_score`` folds a *missing* credit score into the low-score flag: those
+          applicants approve at 2.1%, below even the worst observed band, so a missing score is bad
+          news rather than "unknown".
+        - ``credit_score_x_employed`` and ``income_x_employed`` encode the soft AND — a good score
+          or income only pays off while the applicant is employed.
+        - ``debt_to_income`` is capped, because a handful of near-zero incomes would otherwise send
+          the ratio into the hundreds and dominate the scaler; past the cap the applicant is already
+          maximally indebted.
+        - ``credit_band`` stays a category so it survives a parquet round-trip with the same dtype
+          as the source categoricals.
+        """
         engineered = features.copy()
 
         engineered["credit_score_missing"] = features["CreditScore"].isna().astype(int)
@@ -45,21 +60,15 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
         employed = features["EmploymentType"].ne("Unemployed").astype(int)
         engineered["is_unemployed"] = 1 - employed
 
-        # A missing score is not "unknown": those applicants approve at 2.1%, below even the
-        # worst observed band, so missingness is folded into the low-score flag rather than
-        # being silently treated as "not low".
         engineered["low_credit_score"] = (
             features["CreditScore"].isna()
             | (features["CreditScore"] < CONFIG.thresholds.low_credit_score)
         ).astype(int)
         engineered["low_income"] = (features["Income"] < CONFIG.thresholds.low_income).astype(int)
 
-        # The EDA showed approval is a soft AND: a good score only pays off while employed.
         engineered["credit_score_x_employed"] = features["CreditScore"] * employed
         engineered["income_x_employed"] = features["Income"] * employed
 
-        # A handful of near-zero incomes send this ratio into the hundreds, which would
-        # dominate the scaler. Cap it: past the cap the applicant is already maximally indebted.
         engineered["debt_to_income"] = (
             features["LoanAmount"] / features["Income"].clip(lower=1.0)
         ).clip(upper=CONFIG.thresholds.max_debt_to_income)
@@ -67,8 +76,6 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
             0, np.nan
         )
 
-        # Kept as a category so it survives a parquet round-trip with the same dtype, exactly
-        # like the source categoricals.
         engineered["credit_band"] = pd.cut(
             features["CreditScore"], bins=CREDIT_BANDS, labels=CREDIT_BAND_LABELS
         ).astype("category")

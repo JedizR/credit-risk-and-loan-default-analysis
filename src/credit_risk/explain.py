@@ -74,7 +74,11 @@ def _display_values(model: Pipeline, transformed: np.ndarray) -> np.ndarray:
 
 
 def explain_model(model: Pipeline, features: pd.DataFrame) -> Explanation:
-    """SHAP values for a tree model, computed on the transformed feature space."""
+    """SHAP values for a tree model, computed on the transformed feature space.
+
+    SHAP returns one array per class for a binary classifier; only the approval class is kept, so
+    the returned values explain the probability of approval.
+    """
     transformed = _transform(model, features)
     if hasattr(transformed, "toarray"):
         transformed = transformed.toarray()
@@ -83,7 +87,6 @@ def explain_model(model: Pipeline, features: pd.DataFrame) -> Explanation:
     values = explainer.shap_values(transformed)
     expected = explainer.expected_value
 
-    # Binary classifiers may return one array per class; keep the approval class.
     if isinstance(values, list):
         values = values[1]
         expected = expected[1]
@@ -133,6 +136,10 @@ def plot_dependence(
 
     This is where the soft-AND shows up: a rising credit score only earns approval while the
     applicant is employed, so the two colours separate into different curves.
+
+    Note:
+        ``shap.dependence_plot`` builds its own figure instead of drawing on the current axes, so
+        the figure it actually drew is reclaimed from pyplot with ``plt.gcf()``.
     """
     shap.dependence_plot(
         feature,
@@ -142,8 +149,6 @@ def plot_dependence(
         interaction_index=interaction_feature,
         show=False,
     )
-    # dependence_plot builds its own figure rather than drawing on the current one, so the
-    # figure it actually drew has to be taken back from pyplot.
     figure = plt.gcf()
     figure.set_size_inches(7.5, 5)
     plt.tight_layout()

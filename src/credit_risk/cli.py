@@ -62,6 +62,11 @@ def run_preprocess(args: argparse.Namespace) -> None:
 
 
 def run_train(args: argparse.Namespace) -> None:
+    """Train, save the model and metrics, and record a versioned run beside the model.
+
+    Version artefacts (manifest, model card, registry) are written to the model path's parent, so a
+    custom ``--model-path`` keeps them alongside the working model.
+    """
     frame = load_training_data(args.data)
     options = TrainingOptions(
         tune=args.tune,
@@ -75,7 +80,6 @@ def run_train(args: argparse.Namespace) -> None:
 
     save_model(outcome.model, args.model_path)
     save_metrics(outcome.metrics, args.metrics_path)
-    # Version artefacts live next to the working model, so a custom --model-path keeps them close.
     run_dir = args.model_path.parent
     record = save_run(
         outcome.model,

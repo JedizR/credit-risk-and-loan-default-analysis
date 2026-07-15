@@ -17,7 +17,11 @@ def classify_predictions(
     target: pd.Series,
     threshold: float | None = None,
 ) -> pd.DataFrame:
-    """Label every applicant with the kind of outcome the model produced for them."""
+    """Label every applicant with the kind of outcome the model produced for them.
+
+    Adds ``confidence_error`` = |probability - actual|: how wrong the model was, not just whether it
+    was wrong, because a confident mistake is the worst kind.
+    """
     threshold = CONFIG.training.decision_threshold if threshold is None else threshold
     probabilities = model.predict_proba(features)[:, 1]
     predictions = (probabilities >= threshold).astype(int)
@@ -34,7 +38,6 @@ def classify_predictions(
             "predicted": predictions,
             "outcome": outcome,
             "is_error": outcome.isin(["false_positive", "false_negative"]),
-            # How wrong, not just whether wrong: a confident mistake is the worst kind.
             "confidence_error": np.abs(probabilities - target),
         }
     )
