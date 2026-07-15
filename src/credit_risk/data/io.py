@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-import duckdb
 import pandas as pd
 
 from credit_risk.config import CONFIG
@@ -31,6 +30,13 @@ def write_parquet(frame: pd.DataFrame, path: Path = PROCESSED_PARQUET) -> None:
 
 
 def query(sql: str, source: Path = PROCESSED_PARQUET) -> pd.DataFrame:
+    try:
+        import duckdb
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "duckdb is a notebook-only dependency; run `uv sync --all-groups` to install it"
+        ) from error
+
     connection = duckdb.connect()
     connection.execute(
         f"CREATE VIEW applicants AS SELECT * FROM read_parquet('{Path(source).as_posix()}')"
