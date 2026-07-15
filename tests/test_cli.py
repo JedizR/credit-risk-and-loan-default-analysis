@@ -166,6 +166,68 @@ def test_keep_outliers_leaves_the_training_rows_intact(training_csv: Path, tmp_p
     assert metrics["outliers_removed"] == 0
 
 
+def test_run_train_stage_writes_model_and_metrics(training_csv: Path, tmp_path: Path) -> None:
+    model_path = tmp_path / "models" / "model.joblib"
+    metrics_path = tmp_path / "metrics.json"
+
+    _run(
+        [
+            "run",
+            "--stage",
+            "train",
+            "--data",
+            str(training_csv),
+            "--model-name",
+            "logistic_regression",
+            "--model-path",
+            str(model_path),
+            "--metrics-path",
+            str(metrics_path),
+        ]
+    )
+
+    assert model_path.exists()
+    assert "roc_auc" in json.loads(metrics_path.read_text())
+
+
+def test_run_all_chains_every_stage(
+    training_csv: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(io, "RAW_CSV", training_csv)
+    monkeypatch.setattr(io, "PROCESSED_PARQUET", tmp_path / "processed.parquet")
+    monkeypatch.setattr(io, "REGISTRY_JSON", tmp_path / "data_registry.json")
+
+    _run(
+        [
+            "run",
+            "--stage",
+            "all",
+            "--model-name",
+            "logistic_regression",
+            "--data",
+            str(tmp_path / "processed.parquet"),
+            "--model-path",
+            str(tmp_path / "models" / "model.joblib"),
+            "--metrics-path",
+            str(tmp_path / "metrics.json"),
+            "--output-path",
+            str(tmp_path / "preprocessed.parquet"),
+            "--registry-path",
+            str(tmp_path / "data_registry.json"),
+        ]
+    )
+
+    out = capsys.readouterr().out
+    for stage in ("prepare", "preprocess", "train", "evaluate"):
+        assert f"=== {stage} ===" in out
+    assert (tmp_path / "processed.parquet").exists()
+    assert (tmp_path / "preprocessed.parquet").exists()
+    assert (tmp_path / "models" / "model.joblib").exists()
+
+
 def test_explain_emits_a_reason_for_every_applicant(
     training_csv: Path, scoring_csv: Path, tmp_path: Path
 ) -> None:

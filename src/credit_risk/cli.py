@@ -157,6 +157,42 @@ def run_explain(args: argparse.Namespace) -> None:
     print(decisions.head(5).to_string())
 
 
+PIPELINE_STAGES = ("prepare", "preprocess", "train", "evaluate")
+
+_STAGE_HANDLERS = {
+    "prepare": run_prepare,
+    "preprocess": run_preprocess,
+    "train": run_train,
+    "evaluate": run_evaluate,
+}
+
+
+def run_pipeline(args: argparse.Namespace) -> None:
+    stages = PIPELINE_STAGES if args.stage == "all" else (args.stage,)
+    for stage in stages:
+        print(f"=== {stage} ===")
+        _STAGE_HANDLERS[stage](args)
+
+
+def _add_pipeline_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
+    parser.add_argument("--model-name", choices=sorted(MODELS), default=DEFAULT_MODEL_NAME)
+    parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
+    parser.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
+    parser.add_argument("--figures-path", type=Path, default=None)
+    parser.add_argument("--tune", action="store_true", help="search hyperparameters with Optuna")
+    parser.add_argument("--trials", type=int, default=None, help="Optuna trials when tuning")
+    parser.add_argument(
+        "--select-features", action="store_true", help="keep only the consensus feature set"
+    )
+    parser.add_argument(
+        "--keep-outliers", action="store_true", help="keep consensus outliers in the training rows"
+    )
+    parser.add_argument(
+        "--plots", action="store_true", help="write every figure to the reports directory"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="credit-risk",
@@ -177,23 +213,21 @@ def build_parser() -> argparse.ArgumentParser:
     preprocess.set_defaults(handler=run_preprocess)
 
     train = subcommands.add_parser("train", help="Run the full training pipeline")
-    train.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
-    train.add_argument("--model-name", choices=sorted(MODELS), default=DEFAULT_MODEL_NAME)
-    train.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
-    train.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
-    train.add_argument("--figures-path", type=Path, default=None)
-    train.add_argument("--tune", action="store_true", help="search hyperparameters with Optuna")
-    train.add_argument("--trials", type=int, default=None, help="Optuna trials when tuning")
-    train.add_argument(
-        "--select-features", action="store_true", help="keep only the consensus feature set"
-    )
-    train.add_argument(
-        "--keep-outliers", action="store_true", help="keep consensus outliers in the training rows"
-    )
-    train.add_argument(
-        "--plots", action="store_true", help="write every figure to the reports directory"
-    )
+    _add_pipeline_arguments(train)
     train.set_defaults(handler=run_train)
+
+    run = subcommands.add_parser("run", help="Run the whole pipeline, or a single stage")
+    run.add_argument(
+        "--stage",
+        choices=("all", *PIPELINE_STAGES),
+        default="all",
+        help="which stage to run; 'all' chains prepare, preprocess, train and evaluate",
+    )
+    _add_pipeline_arguments(run)
+    run.add_argument("--output-path", type=Path, default=None, help="preprocess output parquet")
+    run.add_argument("--registry-path", type=Path, default=None, help="preprocess provenance path")
+    run.add_argument("--threshold", type=float, default=None, help="evaluate decision threshold")
+    run.set_defaults(handler=run_pipeline)
 
     evaluate = subcommands.add_parser(
         "evaluate", help="Score a saved model on the held-out applicants"
