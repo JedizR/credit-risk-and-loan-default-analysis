@@ -1,8 +1,8 @@
 import argparse
 import json
-import warnings
 from pathlib import Path
 
+from credit_risk import silence_library_warnings
 from credit_risk.config import CONFIG
 from credit_risk.data import (
     PROCESSED_PARQUET,
@@ -13,7 +13,8 @@ from credit_risk.data import (
 )
 from credit_risk.explain import decision_reasons
 from credit_risk.features.engineering import engineer_features
-from credit_risk.pipeline import DEFAULT_MODEL_NAME, MODEL_BUILDERS
+from credit_risk.models import MODELS
+from credit_risk.pipeline import DEFAULT_MODEL_NAME
 from credit_risk.train import (
     load_model,
     predict_applicants,
@@ -22,7 +23,13 @@ from credit_risk.train import (
     score_model,
     split_holdout,
 )
-from credit_risk.workflow import TrainingOptions, run_training, write_preprocessed_dataset
+from credit_risk.versioning import build_manifest, save_run
+from credit_risk.workflow import (
+    TrainingOptions,
+    TrainingOutcome,
+    run_training,
+    write_preprocessed_dataset,
+)
 
 DEFAULT_MODEL_PATH = CONFIG.paths.model
 DEFAULT_METRICS_PATH = CONFIG.paths.metrics
@@ -35,27 +42,38 @@ def _report(metrics: dict[str, float]) -> None:
 
 
 def run_prepare(_args: argparse.Namespace) -> None:
+    """Repair the raw CSV into the typed parquet and print where it landed."""
     frame = prepare_dataset()
     print(f"Prepared {len(frame)} applicants written to {PROCESSED_PARQUET}")
     print(f"Provenance written to {REGISTRY_JSON}")
 
 
 def run_preprocess(args: argparse.Namespace) -> None:
+    """Engineer the model-ready parquet, update provenance, and print where it landed."""
     engineered = write_preprocessed_dataset(path=args.output_path, registry_path=args.registry_path)
     output = args.output_path or CONFIG.paths.preprocessed_parquet
     registry = args.registry_path or REGISTRY_JSON
 
     print(f"Preprocessed {len(engineered)} applicants into {engineered.shape[1]} columns")
     print(f"Model-ready dataset written to {output}")
+    print(
+        "Numeric nulls are kept on purpose: the imputer is fitted per fold inside the model "
+        "pipeline, so baking values in here would leak the holdout into training."
+    )
     print(f"Provenance updated in {registry}")
 
 
 def run_train(args: argparse.Namespace) -> None:
+    """Train, save the model and metrics, and record a versioned run beside the model.
+
+    Version artefacts (manifest, model card, registry) are written to the model path's parent, so a
+    custom ``--model-path`` keeps them alongside the working model.
+    """
     frame = load_training_data(args.data)
     options = TrainingOptions(
         tune=args.tune,
         select_features=args.select_features,
-        remove_outliers=args.remove_outliers,
+        remove_outliers=not args.keep_outliers,
         write_plots=args.plots,
         trials=args.trials,
         figures_dir=args.figures_path,
@@ -64,6 +82,14 @@ def run_train(args: argparse.Namespace) -> None:
 
     save_model(outcome.model, args.model_path)
     save_metrics(outcome.metrics, args.metrics_path)
+    run_dir = args.model_path.parent
+    record = save_run(
+        outcome.model,
+        _manifest_for(outcome, options, args.model_name),
+        models_dir=run_dir,
+        cards_dir=run_dir / "model_cards",
+        registry_path=run_dir / "registry.json",
+    )
 
     print(f"Trained {args.model_name} on {len(frame)} applicants")
     if outcome.outliers_removed:
@@ -76,10 +102,27 @@ def run_train(args: argparse.Namespace) -> None:
     print(f"Metrics written to {args.metrics_path}")
     if outcome.figures:
         print(f"Wrote {len(outcome.figures)} figures to {outcome.figures[0].parent}")
+    print(f"Recorded run {record.run_id}; model card at {record.card_path}")
     _report(outcome.metrics)
 
 
+def _manifest_for(outcome: TrainingOutcome, options: TrainingOptions, model_name: str) -> dict:
+    return build_manifest(
+        model_name=model_name,
+        params=outcome.params,
+        features=outcome.features,
+        threshold=outcome.threshold,
+        metrics=outcome.metrics,
+        options={
+            "tune": options.tune,
+            "select_features": options.select_features,
+            "remove_outliers": options.remove_outliers,
+        },
+    )
+
+
 def run_evaluate(args: argparse.Namespace) -> None:
+    """Score a saved model on the holdout split and print the metrics."""
     frame = engineer_features(load_training_data(args.data))
     model = load_model(args.model_path)
     features = list(model.feature_names_in_)
@@ -92,6 +135,7 @@ def run_evaluate(args: argparse.Namespace) -> None:
 
 
 def run_predict(args: argparse.Namespace) -> None:
+    """Score new applicants from a CSV into the output path."""
     model = load_model(args.model_path)
     features = engineer_features(load_features_to_score(args.input_path))[
         list(model.feature_names_in_)
@@ -107,6 +151,7 @@ def run_predict(args: argparse.Namespace) -> None:
 
 
 def run_explain(args: argparse.Namespace) -> None:
+    """Score new applicants with a human-readable reason per decision."""
     model = load_model(args.model_path)
     features = engineer_features(load_features_to_score(args.input_path))[
         list(model.feature_names_in_)
@@ -121,7 +166,46 @@ def run_explain(args: argparse.Namespace) -> None:
     print(decisions.head(5).to_string())
 
 
+PIPELINE_STAGES = ("prepare", "preprocess", "train", "evaluate")
+
+_STAGE_HANDLERS = {
+    "prepare": run_prepare,
+    "preprocess": run_preprocess,
+    "train": run_train,
+    "evaluate": run_evaluate,
+}
+
+
+def run_pipeline(args: argparse.Namespace) -> None:
+    """Run the whole pipeline or a single stage, dispatched over the stage-handler registry."""
+    stages = PIPELINE_STAGES if args.stage == "all" else (args.stage,)
+    for stage in stages:
+        print(f"=== {stage} ===")
+        _STAGE_HANDLERS[stage](args)
+
+
+def _add_pipeline_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the training and run flags shared by the ``train`` and ``run`` parsers."""
+    parser.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
+    parser.add_argument("--model-name", choices=sorted(MODELS), default=DEFAULT_MODEL_NAME)
+    parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
+    parser.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
+    parser.add_argument("--figures-path", type=Path, default=None)
+    parser.add_argument("--tune", action="store_true", help="search hyperparameters with Optuna")
+    parser.add_argument("--trials", type=int, default=None, help="Optuna trials when tuning")
+    parser.add_argument(
+        "--select-features", action="store_true", help="keep only the consensus feature set"
+    )
+    parser.add_argument(
+        "--keep-outliers", action="store_true", help="keep consensus outliers in the training rows"
+    )
+    parser.add_argument(
+        "--plots", action="store_true", help="write every figure to the reports directory"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
+    """Build the argparse tree for the ``credit-risk`` CLI."""
     parser = argparse.ArgumentParser(
         prog="credit-risk",
         description="Prepare, train, evaluate, apply and explain the loan approval model.",
@@ -141,23 +225,21 @@ def build_parser() -> argparse.ArgumentParser:
     preprocess.set_defaults(handler=run_preprocess)
 
     train = subcommands.add_parser("train", help="Run the full training pipeline")
-    train.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
-    train.add_argument("--model-name", choices=sorted(MODEL_BUILDERS), default=DEFAULT_MODEL_NAME)
-    train.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
-    train.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
-    train.add_argument("--figures-path", type=Path, default=None)
-    train.add_argument("--tune", action="store_true", help="search hyperparameters with Optuna")
-    train.add_argument("--trials", type=int, default=None, help="Optuna trials when tuning")
-    train.add_argument(
-        "--select-features", action="store_true", help="keep only the consensus feature set"
-    )
-    train.add_argument(
-        "--remove-outliers", action="store_true", help="drop consensus outliers from training rows"
-    )
-    train.add_argument(
-        "--plots", action="store_true", help="write every figure to the reports directory"
-    )
+    _add_pipeline_arguments(train)
     train.set_defaults(handler=run_train)
+
+    run = subcommands.add_parser("run", help="Run the whole pipeline, or a single stage")
+    run.add_argument(
+        "--stage",
+        choices=("all", *PIPELINE_STAGES),
+        default="all",
+        help="which stage to run; 'all' chains prepare, preprocess, train and evaluate",
+    )
+    _add_pipeline_arguments(run)
+    run.add_argument("--output-path", type=Path, default=None, help="preprocess output parquet")
+    run.add_argument("--registry-path", type=Path, default=None, help="preprocess provenance path")
+    run.add_argument("--threshold", type=float, default=None, help="evaluate decision threshold")
+    run.set_defaults(handler=run_pipeline)
 
     evaluate = subcommands.add_parser(
         "evaluate", help="Score a saved model on the held-out applicants"
@@ -188,10 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    # Library-internal noise (SHAP colormaps, sklearn feature-name checks) would otherwise bury
-    # the run's own output; warnings stay visible in the tests and notebooks.
-    warnings.filterwarnings("ignore", category=UserWarning)
-    warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
-
+    """Silence library warnings, parse arguments, and dispatch to the chosen handler."""
+    silence_library_warnings()
     args = build_parser().parse_args()
     args.handler(args)

@@ -1,6 +1,6 @@
 [project]
 name = "credit-risk"
-version = "0.1.0"
+version = "1.0.0"
 description = "Credit risk and loan default analysis for the Practical Machine Learning final project"
 readme = "README.md"
 authors = [
@@ -8,7 +8,6 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "duckdb>=1.5.4",
     "joblib>=1.5.3",
     "lightgbm>=4.6.0",
     "matplotlib>=3.11.0",
@@ -29,6 +28,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "duckdb>=1.5.4",
     "jupyter>=1.1.1",
     "nbstripout>=0.9.1",
     "pre-commit>=4.6.0",

@@ -17,6 +17,7 @@ FAMILIES = ["mutual_information", "model_gain", "permutation"]
 
 
 def split_feature_types(columns: list[str]) -> tuple[list[str], list[str]]:
+    """Split a column list into the model's numeric and categorical groups."""
     numeric = [column for column in columns if column in MODEL_NUMERIC_FEATURES]
     categorical = [column for column in columns if column in MODEL_CATEGORICAL_FEATURES]
     return numeric, categorical

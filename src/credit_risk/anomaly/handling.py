@@ -11,6 +11,7 @@ CONSENSUS_VOTES = 2
 
 
 def impossible_value_flags(frame: pd.DataFrame) -> pd.Series:
+    """Flag rows with a physically impossible negative value (domain rule)."""
     flagged = pd.Series(False, index=frame.index)
     for column in IMPOSSIBLE_NEGATIVE_FEATURES:
         if column in frame.columns:
@@ -19,6 +20,7 @@ def impossible_value_flags(frame: pd.DataFrame) -> pd.Series:
 
 
 def iqr_flags(frame: pd.DataFrame, columns: list[str] = NUMERIC_FEATURES) -> pd.Series:
+    """Flag rows outside the 1.5x IQR fence on any numeric column."""
     flagged = pd.Series(False, index=frame.index)
     for column in columns:
         values = frame[column]
@@ -29,6 +31,7 @@ def iqr_flags(frame: pd.DataFrame, columns: list[str] = NUMERIC_FEATURES) -> pd.
 
 
 def z_score_flags(frame: pd.DataFrame, columns: list[str] = NUMERIC_FEATURES) -> pd.Series:
+    """Flag rows more than 3 standard deviations from the mean on any numeric column."""
     flagged = pd.Series(False, index=frame.index)
     for column in columns:
         values = frame[column]
@@ -65,19 +68,23 @@ def summarize_outliers(flags: pd.DataFrame, frame: pd.DataFrame) -> pd.DataFrame
 
 
 def detector_agreement(flags: pd.DataFrame) -> pd.DataFrame:
-    """Pairwise Jaccard overlap — low agreement means the detectors disagree on what is odd."""
+    """Pairwise Jaccard overlap — low agreement means the detectors disagree on what is odd.
+
+    Two methods that flag nothing are treated as agreeing completely (overlap 1.0): they agree that
+    nothing is odd.
+    """
     methods = list(flags.columns)
     overlap = pd.DataFrame(index=methods, columns=methods, dtype=float)
     for left in methods:
         for right in methods:
             union = (flags[left] | flags[right]).sum()
             intersection = (flags[left] & flags[right]).sum()
-            # Two methods that flag nothing agree completely that nothing is odd.
             overlap.loc[left, right] = round(intersection / union, 3) if union else 1.0
     return overlap
 
 
 def consensus_outliers(flags: pd.DataFrame, min_votes: int = CONSENSUS_VOTES) -> pd.Series:
+    """Flag rows that at least ``min_votes`` methods agree are outliers."""
     return (flags.sum(axis=1) >= min_votes).rename("consensus")
 
 
@@ -91,6 +98,7 @@ def list_outliers(frame: pd.DataFrame, flags: pd.DataFrame, mask: pd.Series) -> 
 
 
 def remove_outliers(frame: pd.DataFrame, mask: pd.Series) -> pd.DataFrame:
+    """Return the frame without the masked rows."""
     return frame[~mask]
 
 

@@ -17,7 +17,11 @@ def classify_predictions(
     target: pd.Series,
     threshold: float | None = None,
 ) -> pd.DataFrame:
-    """Label every applicant with the kind of outcome the model produced for them."""
+    """Label every applicant with the kind of outcome the model produced for them.
+
+    Adds ``confidence_error`` = |probability - actual|: how wrong the model was, not just whether it
+    was wrong, because a confident mistake is the worst kind.
+    """
     threshold = CONFIG.training.decision_threshold if threshold is None else threshold
     probabilities = model.predict_proba(features)[:, 1]
     predictions = (probabilities >= threshold).astype(int)
@@ -34,13 +38,13 @@ def classify_predictions(
             "predicted": predictions,
             "outcome": outcome,
             "is_error": outcome.isin(["false_positive", "false_negative"]),
-            # How wrong, not just whether wrong: a confident mistake is the worst kind.
             "confidence_error": np.abs(probabilities - target),
         }
     )
 
 
 def error_summary(classified: pd.DataFrame) -> pd.DataFrame:
+    """Counts, shares and mean probability for each outcome kind (TN/FP/FN/TP)."""
     counts = classified["outcome"].value_counts().reindex(ERROR_KINDS, fill_value=0)
     summary = pd.DataFrame({"count": counts})
     summary["share_pct"] = (summary["count"] / len(classified) * 100).round(2)
@@ -95,6 +99,7 @@ def confident_mistakes(classified: pd.DataFrame, count: int = 10) -> pd.DataFram
 
 
 def plot_error_overview(classified: pd.DataFrame) -> Figure:
+    """Outcome counts and the predicted-probability distribution, errors vs correct."""
     figure, (outcome_axis, probability_axis) = plt.subplots(1, 2, figsize=(13, 4.5))
 
     counts = classified["outcome"].value_counts().reindex(ERROR_KINDS, fill_value=0)
@@ -122,6 +127,7 @@ def plot_error_overview(classified: pd.DataFrame) -> Figure:
 
 
 def plot_error_rate_by_segment(classified: pd.DataFrame, columns: list[str]) -> Figure:
+    """Error rate per group for each segment column, against the population average."""
     figure, axes = plt.subplots(1, len(columns), figsize=(5.5 * len(columns), 4))
     for column, axis in zip(columns, np.atleast_1d(axes), strict=True):
         rates = error_rate_by_segment(classified, column)["error_rate"]

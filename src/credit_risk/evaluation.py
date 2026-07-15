@@ -27,6 +27,7 @@ SCORING = "average_precision"
 
 
 def cross_validation_folds() -> StratifiedKFold:
+    """The shared 5-fold stratified splitter (seeded), so every CV score is comparable."""
     return StratifiedKFold(
         n_splits=CONFIG.training.cross_validation_folds,
         shuffle=True,
@@ -91,6 +92,7 @@ def optimal_threshold(
     false_approval_cost: float | None = None,
     false_rejection_cost: float | None = None,
 ) -> float:
+    """The decision threshold that minimises expected cost — a business choice, not a fit."""
     costs = threshold_cost_curve(target, probabilities, false_approval_cost, false_rejection_cost)
     return float(costs.loc[costs["expected_cost"].idxmin(), "threshold"])
 
@@ -98,6 +100,7 @@ def optimal_threshold(
 def plot_roc_and_pr_curves(
     models: dict[str, Pipeline], features: pd.DataFrame, target: pd.Series
 ) -> Figure:
+    """ROC and precision-recall curves for one or more fitted models on the holdout."""
     figure, (roc_axis, pr_axis) = plt.subplots(1, 2, figsize=(13, 5))
     base_rate = target.mean()
 
@@ -134,6 +137,7 @@ def plot_roc_and_pr_curves(
 def plot_calibration_curve(
     models: dict[str, Pipeline], features: pd.DataFrame, target: pd.Series, bins: int = 10
 ) -> Figure:
+    """Reliability curves: predicted probability vs observed approval rate, per model."""
     figure, axis = plt.subplots(figsize=(6.5, 6))
     for name, model in models.items():
         probabilities = model.predict_proba(features)[:, 1]
@@ -157,6 +161,7 @@ def plot_calibration_curve(
 def plot_confusion_matrix(
     model: Pipeline, features: pd.DataFrame, target: pd.Series, threshold: float | None = None
 ) -> Figure:
+    """The confusion matrix at a decision threshold."""
     threshold = CONFIG.training.decision_threshold if threshold is None else threshold
     predictions = (model.predict_proba(features)[:, 1] >= threshold).astype(int)
 

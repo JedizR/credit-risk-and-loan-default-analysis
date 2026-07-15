@@ -7,9 +7,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 from credit_risk.data.schema import FEATURE_COLUMNS, TARGET_COLUMN  # noqa: E402
-from credit_risk.pipeline import UnknownModelError, build_model  # noqa: E402
+from credit_risk.models import UnknownModelError  # noqa: E402
+from credit_risk.pipeline import build_model  # noqa: E402
 from credit_risk.tuning import (  # noqa: E402
-    SEARCH_SPACES,
     best_params,
     plot_param_importances,
     plot_tuning_history,
@@ -19,13 +19,7 @@ from credit_risk.tuning import (  # noqa: E402
 from tests.plot_assertions import assert_figure_is_drawn  # noqa: E402
 
 
-def test_every_registered_model_has_a_search_space() -> None:
-    from credit_risk.pipeline import MODEL_BUILDERS
-
-    assert set(SEARCH_SPACES) == set(MODEL_BUILDERS)
-
-
-def test_unknown_model_has_no_search_space() -> None:
+def test_tuning_rejects_an_unknown_model() -> None:
     import optuna
 
     with pytest.raises(UnknownModelError, match="neural_net"):

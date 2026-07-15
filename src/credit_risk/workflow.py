@@ -61,7 +61,7 @@ class TrainingOptions:
 
     tune: bool = False
     select_features: bool = False
-    remove_outliers: bool = False
+    remove_outliers: bool = True
     write_plots: bool = False
     trials: int | None = None
     figures_dir: Path | None = None
@@ -69,6 +69,8 @@ class TrainingOptions:
 
 @dataclass(frozen=True)
 class TrainingOutcome:
+    """What a training run produced: model, metrics, features, params, threshold and figures."""
+
     model: Pipeline
     metrics: dict[str, float]
     features: list[str]
@@ -85,8 +87,10 @@ def run_training(
 ) -> TrainingOutcome:
     """Engineer, clean, select, tune, fit, threshold and score — the notebook flow, headless.
 
-    Every learned decision (outlier removal, feature selection, tuning, threshold) is made on
-    the training rows alone; the holdout is touched exactly once, to report the final numbers.
+    Every learned decision (outlier removal, feature selection, tuning, threshold) is made on the
+    training rows alone; the holdout is touched exactly once, to report the final numbers. The
+    decision threshold is chosen on out-of-fold training predictions rather than in-sample scores
+    (which are overconfident), so the holdout stays untouched until that final score.
     """
     options = options or TrainingOptions()
 
@@ -118,8 +122,6 @@ def run_training(
     model = build_model(model_name, numeric, categorical, params)
     model.fit(train_features, train_target)
 
-    # The threshold is a decision, not a fit: choose it on out-of-fold training predictions so
-    # the holdout stays untouched until the final score.
     out_of_fold = out_of_fold_probabilities(
         train_features, train_target, model_name, numeric, categorical, params
     )
@@ -172,20 +174,22 @@ def write_figures(
     study: Any | None = None,
     directory: Path | None = None,
 ) -> list[Path]:
-    """Write every figure the notebook produces into the reports directory."""
+    """Write every figure the notebook produces into the reports directory.
+
+    Feature selection may have dropped columns from the model, so two things are derived from what
+    the fitted model actually uses: the error-analysis context columns (to describe *who* it fails
+    on) are re-attached from the holdout frame, and the dependence-plot feature names come from the
+    model's own top features rather than being hard-coded.
+    """
     directory = directory or CONFIG.paths.figures
     directory.mkdir(parents=True, exist_ok=True)
 
     numeric, categorical = split_feature_types(list(train_features.columns))
     probabilities = model.predict_proba(holdout_features)[:, 1]
     classified = classify_predictions(model, holdout_features, holdout_target, threshold)
-    # Selection may have dropped these columns from the model, but the error analysis still
-    # needs them to say *who* the model fails on.
     for segment in ERROR_SEGMENTS:
         classified[segment] = holdout_frame[segment]
     explanation = explain_model(model, holdout_features)
-    # Feature selection may drop any given column, so the dependence plot names are derived
-    # from what the fitted model actually uses rather than hard-coded.
     influential = top_features(explanation, 2)
 
     named_figures = {
@@ -227,6 +231,7 @@ def write_figures(
 
 
 def write_selection_figure(curve: pd.DataFrame, directory: Path | None = None) -> Path:
+    """Render the feature-selection curve into the reports directory."""
     directory = directory or CONFIG.paths.figures
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "features_selection_curve.png"

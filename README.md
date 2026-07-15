@@ -12,14 +12,18 @@ The data moves through three stages, each stored as a typed parquet and hashed i
 | Stage | Path | What it holds |
 | --- | --- | --- |
 | raw | `data/raw/*.csv` | the original file, never modified |
-| processed | `data/processed/applicants.parquet` | `make prepare` — impossible values repaired, dtypes fixed |
-| preprocessed | `data/preprocessed/applicants.parquet` | `make preprocess` — the model-ready frame, with the engineered features |
+| processed | `data/processed/applicants.parquet` | `credit-risk prepare` — impossible values repaired, dtypes fixed |
+| preprocessed | `data/preprocessed/applicants.parquet` | `credit-risk preprocess` — the model-ready frame, with the engineered features |
 
 The preprocessed parquet is the exact input the model pipeline is fitted on. Only the
 *stateless* half of preprocessing is stored there: imputation, scaling and encoding are
 deliberately left out, because they are fitted per training fold — a globally fitted version
 saved to disk would leak the holdout into the training data. Those steps stay inside the
 sklearn pipeline.
+
+So the parquet still shows nulls in `Income`, `CreditScore` and the features derived from them.
+That is expected, not a bug: the classifier never sees a NaN, because the pipeline imputes each
+fold as it is fitted.
 
 Three properties drive the modelling choices:
 
@@ -37,38 +41,39 @@ make setup
 
 ## Usage
 
-```bash
-make prepare                        # repair impossible values, write the typed parquet
-make preprocess                     # engineer the features, write the model-ready parquet
-make train                          # full pipeline: outliers, selection, tuning, threshold
-make train MODEL=random_forest      # train a different model
-make train PLOT=true                # also write every figure to reports/figures/
-make eval                           # score the saved model on the held-out 20%
-make predict APPLICANTS=new.csv     # score new applicants into out/predictions.csv
-make explain APPLICANTS=new.csv     # score them with a readable reason per decision
-make lint                           # ruff check + format check
-make test                           # pytest with coverage
-```
-
-`make train` runs the same pipeline the modelling notebook does: engineer features, drop
-consensus outliers from the training rows, select a feature set, search hyperparameters with
-Optuna, choose the decision threshold by expected cost, and score once on the holdout. Each
-stage can be switched off:
+`credit-risk` is the single entry point. Its `run` command executes the whole pipeline, or one
+stage:
 
 ```bash
-make train TUNE=false SELECT=false REMOVE_OUTLIERS=false   # plain fit, no pipeline steps
-make train TRIALS=100                                      # a longer Optuna search
+uv run credit-risk run                                     # prepare -> preprocess -> train -> evaluate
+uv run credit-risk run --stage train                       # one stage only
+uv run credit-risk run --tune --select-features --plots     # full pipeline, tuned, every figure written
+uv run credit-risk run --stage train --model-name random_forest
 ```
 
-The CLI takes the same work directly:
+The full run engineers features, drops consensus outliers from the training rows, selects a feature
+set, searches hyperparameters with Optuna (`--tune`), chooses the decision threshold by expected
+cost, and scores once on the holdout. Outlier removal is on by default; `--keep-outliers` turns it
+off. `--stage` restricts the run to a single step (`prepare`, `preprocess`, `train` or `evaluate`).
+
+Each stage is also its own subcommand, and scoring new applicants has two more:
 
 ```bash
 uv run credit-risk train --model-name lightgbm --tune --select-features --plots
+uv run credit-risk predict --input-path new.csv --output-path out/predictions.csv
 uv run credit-risk explain --input-path new.csv --output-path out/decisions.csv
 ```
 
 Available models: `lightgbm` (default), `logistic_regression`, `random_forest`,
 `gradient_boosting`.
+
+Development tasks stay in the Makefile:
+
+```bash
+make setup    # install the locked environment and the git hooks
+make lint     # ruff check + format check
+make test     # pytest with coverage
+```
 
 ## Configuration
 
@@ -85,36 +90,59 @@ optuna_trials = 100
 false_approval_cost = 10.0     # a bad approval costs ten times a missed good applicant
 ```
 
+## Run history
+
+Every `train` records itself, so a model always carries the story of what produced it. Alongside
+the working `models/model.joblib` it writes, under `models/`:
+
+| Artefact | What it holds |
+| --- | --- |
+| `<run_id>.joblib` | the versioned model |
+| `<run_id>.meta.json` | full manifest: params, features, metrics, config, data hashes, git SHA, library versions |
+| `model_cards/<run_id>.md` | the manifest rendered for a human, with a reproduce command |
+| `registry.json` | an index of every run and a `current` pointer |
+
+The `run_id` is a content hash of the inputs that define the model (data, config, parameters), so
+**identical inputs reproduce the same id** on any machine — that is the reproducibility check.
+The code version comes from `git rev-parse` locally, the `GIT_SHA` environment variable in the
+container, or is recorded as null when neither is available. These artefacts stay local (gitignored);
+the manifest, not git, is what makes a run reproducible.
+
 ## Docker
 
 The image ships the CLI as its entry point, so anything after the image name is passed
 straight to `credit-risk`. Data and artefacts are mounted rather than baked in.
 
 ```bash
-make docker-build                            # build the image
-make docker-prepare                          # build the typed dataset in the container
-make docker-train MODEL=lightgbm PLOT=true   # full pipeline, figures written to the host
-make docker-eval                             # evaluate the saved model
-make docker-predict                          # score APPLICANTS into out/
-make docker-explain                          # decisions with reasons into out/
+make docker-build                                        # build the image
+make docker-run                                          # full pipeline in the container (run --stage all)
+make docker-run ARGS="run --stage train --tune --plots"  # a specific run, figures written to the host
+make docker-run ARGS="predict --input-path new.csv"      # score new applicants into out/
 ```
 
-The whole pipeline runs in the container, and results land on the host:
+`docker-run` passes `ARGS` straight to `credit-risk` inside the container and mounts the data and
+artefact directories, so the whole pipeline runs in the container and results land on the host:
 
 | Mount | Mode | Contents |
 | --- | --- | --- |
 | `data/raw` | read-only | the immutable source dataset |
 | `data/` | read-write | derived parquet and provenance |
 | `models/`, `out/` | read-write | model artefact, predictions and decisions |
-| `reports/` | read-write | `metrics.json`, and `figures/` when `PLOT=true` |
+| `reports/` | read-write | `metrics.json`, and `figures/` when `--plots` is passed |
 
-With `PLOT=true` the container writes the model dynamics (learning curve, ROC/PR, calibration),
+With `--plots` the container writes the model dynamics (learning curve, ROC/PR, calibration),
 the evaluation (confusion matrix, threshold cost), the tuning history, the SHAP explanations
 (beeswarm, importance, dependence) and the error analysis into `reports/figures/`.
 
 A bare `docker run --rm credit-risk` prints the CLI help — the smoke test CI runs on every
 pull request. Tagging a release on `main` publishes the image to
 `ghcr.io/jedizr/credit-risk-and-loan-default-analysis`.
+
+The runtime image (~1.38 GB) carries only what the CLI needs. Notebook-only tools stay in the
+`dev` dependency group and never enter it — `duckdb`, for example, backs the exploratory `query`
+helper and is imported lazily, so it ships with `uv sync --all-groups` for the notebooks but not
+with the image. The bulk of the size is the model and explainability stack (`scikit-learn`,
+`lightgbm`, `pyarrow`, and `shap` with its `numba` compiler), each of which a CLI command uses.
 
 ## Layout
 
@@ -139,6 +167,32 @@ notebooks/          01 exploratory analysis, 02 modelling
 
 Notebooks contain no function definitions: they import from `credit_risk` and narrate, so the
 notebook, the CLI and the container all run the same code.
+
+## Design
+
+A handful of patterns, each chosen for the smell it removes rather than for its name:
+
+- **Registry / Simple Factory** — `MODELS`/`get_model` (and `DETECTORS`/`get_detector`, and the
+  CLI's stage dispatch) pick an implementation by a runtime string, so adding a model or detector is
+  one dict entry, not an `if/elif` in three files.
+- **Strategy behind an abstract base** — `CreditModel` (and `AnomalyDetector`) is an ABC defining
+  the contract (`build_estimator` + `search_space`); the four models are interchangeable strategies,
+  and a future hand-written model implements the ABC and drops into the registry.
+- **Adapter** — `AutoencoderFeatures` wraps an sklearn `MLPRegressor` in the transformer interface,
+  so the pipeline treats it like any other preprocessing block.
+- **Composite** — the sklearn `Pipeline` composes preprocessing and the classifier into one
+  estimator that is fitted, scored and persisted as a unit.
+- **Value Object** — `HoldoutSplit`, `TrainingOptions`, `TrainingOutcome`, `Explanation` and
+  `RunRecord` bundle related fields, so functions take one typed value instead of a long argument
+  list and no caller passes bare booleans.
+
+Two patterns were considered and **rejected on purpose**:
+
+- **Factory Method** (an abstract *creator* subclass per product) — the models are sklearn
+  estimators sharing one interface, chosen by a config string, never by a subclass; five creator
+  classes to replace a one-line registry is speculative generality.
+- **One abstract class per model** — an abstract class with a single implementation is the same
+  smell. `CreditModel` is *one* abstract base with four concrete subclasses, not five abstract ones.
 
 ## Contributing
 

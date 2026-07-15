@@ -13,7 +13,7 @@ def test_default_run_trains_and_scores(sample_frame: pd.DataFrame) -> None:
     assert isinstance(outcome, TrainingOutcome)
     assert 0.0 <= outcome.metrics["average_precision"] <= 1.0
     assert outcome.metrics["feature_count"] == len(outcome.features)
-    assert outcome.outliers_removed == 0
+    assert outcome.outliers_removed > 0
     assert outcome.figures == []
 
 
@@ -31,13 +31,13 @@ def test_sensitive_features_never_enter_the_model(sample_frame: pd.DataFrame) ->
         assert sensitive not in outcome.features
 
 
-def test_outlier_removal_shrinks_the_training_rows(sample_frame: pd.DataFrame) -> None:
+def test_keeping_outliers_leaves_all_rows(sample_frame: pd.DataFrame) -> None:
     outcome = run_training(
-        sample_frame, "logistic_regression", TrainingOptions(remove_outliers=True)
+        sample_frame, "logistic_regression", TrainingOptions(remove_outliers=False)
     )
 
-    assert outcome.outliers_removed > 0
-    assert outcome.metrics["outliers_removed"] == outcome.outliers_removed
+    assert outcome.outliers_removed == 0
+    assert outcome.metrics["outliers_removed"] == 0
 
 
 def test_selection_trims_the_feature_set(sample_frame: pd.DataFrame) -> None:
