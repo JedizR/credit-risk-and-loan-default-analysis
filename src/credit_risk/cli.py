@@ -1,8 +1,8 @@
 import argparse
 import json
-import warnings
 from pathlib import Path
 
+from credit_risk import silence_library_warnings
 from credit_risk.config import CONFIG
 from credit_risk.data import (
     PROCESSED_PARQUET,
@@ -219,10 +219,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    # Library-internal noise (SHAP colormaps, sklearn feature-name checks) would otherwise bury
-    # the run's own output; warnings stay visible in the tests and notebooks.
-    warnings.filterwarnings("ignore", category=UserWarning)
-    warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
-
+    silence_library_warnings()
     args = build_parser().parse_args()
     args.handler(args)
