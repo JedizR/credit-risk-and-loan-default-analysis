@@ -18,7 +18,7 @@ TRAIN_FLAGS := --model-name $(MODEL) \
 	$(if $(filter true,$(PLOT)),--plots) \
 	$(if $(filter true,$(TUNE)),--tune) \
 	$(if $(filter true,$(SELECT)),--select-features) \
-	$(if $(filter true,$(REMOVE_OUTLIERS)),--remove-outliers) \
+	$(if $(filter true,$(REMOVE_OUTLIERS)),,--keep-outliers) \
 	$(if $(TRIALS),--trials $(TRIALS))
 
 # Raw data stays read-only; derived data, models and reports are written back to the host.

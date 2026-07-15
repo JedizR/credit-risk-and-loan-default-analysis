@@ -135,7 +135,6 @@ def test_train_records_selection_and_outlier_removal(training_csv: Path, tmp_pat
             "--metrics-path",
             str(metrics_path),
             "--select-features",
-            "--remove-outliers",
         ]
     )
 
@@ -143,6 +142,28 @@ def test_train_records_selection_and_outlier_removal(training_csv: Path, tmp_pat
     assert metrics["outliers_removed"] > 0
     assert metrics["feature_count"] > 0
     assert metrics["threshold"] != 0.5 or True
+
+
+def test_keep_outliers_leaves_the_training_rows_intact(training_csv: Path, tmp_path: Path) -> None:
+    metrics_path = tmp_path / "metrics.json"
+
+    _run(
+        [
+            "train",
+            "--data",
+            str(training_csv),
+            "--model-name",
+            "logistic_regression",
+            "--model-path",
+            str(tmp_path / "model.joblib"),
+            "--metrics-path",
+            str(metrics_path),
+            "--keep-outliers",
+        ]
+    )
+
+    metrics = json.loads(metrics_path.read_text())
+    assert metrics["outliers_removed"] == 0
 
 
 def test_explain_emits_a_reason_for_every_applicant(

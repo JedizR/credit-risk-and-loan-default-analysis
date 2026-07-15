@@ -155,12 +155,14 @@ def _render_data(data: dict) -> str:
 
 
 def _reproduce_flags(options: dict) -> str:
-    flags = {
-        "tune": "--tune",
-        "select_features": "--select-features",
-        "remove_outliers": "--remove-outliers",
-    }
-    return "".join(f" {flag}" for key, flag in flags.items() if options.get(key))
+    present = []
+    if options.get("tune"):
+        present.append("--tune")
+    if options.get("select_features"):
+        present.append("--select-features")
+    if not options.get("remove_outliers", True):
+        present.append("--keep-outliers")
+    return "".join(f" {flag}" for flag in present)
 
 
 def update_registry(manifest: dict, registry_path: Path | None = None) -> None:

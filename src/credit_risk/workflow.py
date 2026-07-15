@@ -61,7 +61,7 @@ class TrainingOptions:
 
     tune: bool = False
     select_features: bool = False
-    remove_outliers: bool = False
+    remove_outliers: bool = True
     write_plots: bool = False
     trials: int | None = None
     figures_dir: Path | None = None
