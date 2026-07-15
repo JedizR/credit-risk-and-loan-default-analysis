@@ -20,6 +20,8 @@ TRACKED_LIBRARIES = ["lightgbm", "scikit-learn", "shap", "optuna", "numpy", "pan
 
 @dataclass(frozen=True)
 class RunRecord:
+    """The id, manifest and file paths written for one versioned training run."""
+
     run_id: str
     manifest: dict
     model_path: Path
@@ -55,6 +57,7 @@ def capture_git_sha() -> str | None:
 
 
 def library_versions() -> dict[str, str]:
+    """Python and the pinned versions of the model/explainability libraries, for the manifest."""
     versions = {"python": platform.python_version(), "credit_risk": __version__}
     for library in TRACKED_LIBRARIES:
         try:
@@ -84,6 +87,9 @@ def build_manifest(
     git_sha: str | None = None,
     data_registry_path: Path | None = None,
 ) -> dict:
+    """Assemble the full run manifest: the content-hash run id plus everything that defines and
+    describes the model — params, features, metrics, config, data hashes, git SHA and lib versions.
+    """
     inputs = {
         "model_name": model_name,
         "params": params,
@@ -104,6 +110,7 @@ def build_manifest(
 
 
 def render_model_card(manifest: dict) -> str:
+    """Render the manifest as a human-readable Markdown model card, with a reproduce command."""
     metric_rows = "\n".join(f"| {name} | {value} |" for name, value in manifest["metrics"].items())
     library_rows = "\n".join(
         f"- {name}: {ver}" for name, ver in manifest["library_versions"].items()

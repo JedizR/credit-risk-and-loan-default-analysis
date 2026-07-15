@@ -7,6 +7,8 @@ CONFIG_FILE = Path("config.toml")
 
 @dataclass(frozen=True)
 class Paths:
+    """File locations for every data stage, model artefact and report."""
+
     raw_csv: Path = Path("data/raw/loan_risk_prediction_dataset.csv")
     processed_parquet: Path = Path("data/processed/applicants.parquet")
     preprocessed_parquet: Path = Path("data/preprocessed/applicants.parquet")
@@ -33,6 +35,8 @@ class Thresholds:
 
 @dataclass(frozen=True)
 class Training:
+    """Run knobs: CV folds, decision threshold, cost weights, Optuna trials and contamination."""
+
     model_name: str = "lightgbm"
     holdout_fraction: float = 0.2
     cross_validation_folds: int = 5
@@ -46,6 +50,8 @@ class Training:
 
 @dataclass(frozen=True)
 class Config:
+    """The whole configuration tree: seed, sensitive features, paths, thresholds and training."""
+
     seed: int = 42
     sensitive_features: tuple[str, ...] = ("Gender", "City")
     paths: Paths = field(default_factory=Paths)
@@ -53,13 +59,16 @@ class Config:
     training: Training = field(default_factory=Training)
 
     def with_training(self, **overrides: object) -> "Config":
+        """Return a copy of this config with some ``Training`` fields replaced."""
         return replace(self, training=replace(self.training, **overrides))
 
     def as_dict(self) -> dict:
+        """Return the whole config tree as a nested dict (embedded in the run manifest)."""
         return asdict(self)
 
 
 def load_config(path: Path = CONFIG_FILE) -> Config:
+    """Load ``CONFIG``: the dataclass defaults, overlaid by an optional ``config.toml``."""
     if not Path(path).exists():
         return Config()
 

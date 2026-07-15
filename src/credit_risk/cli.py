@@ -42,12 +42,14 @@ def _report(metrics: dict[str, float]) -> None:
 
 
 def run_prepare(_args: argparse.Namespace) -> None:
+    """Repair the raw CSV into the typed parquet and print where it landed."""
     frame = prepare_dataset()
     print(f"Prepared {len(frame)} applicants written to {PROCESSED_PARQUET}")
     print(f"Provenance written to {REGISTRY_JSON}")
 
 
 def run_preprocess(args: argparse.Namespace) -> None:
+    """Engineer the model-ready parquet, update provenance, and print where it landed."""
     engineered = write_preprocessed_dataset(path=args.output_path, registry_path=args.registry_path)
     output = args.output_path or CONFIG.paths.preprocessed_parquet
     registry = args.registry_path or REGISTRY_JSON
@@ -120,6 +122,7 @@ def _manifest_for(outcome: TrainingOutcome, options: TrainingOptions, model_name
 
 
 def run_evaluate(args: argparse.Namespace) -> None:
+    """Score a saved model on the holdout split and print the metrics."""
     frame = engineer_features(load_training_data(args.data))
     model = load_model(args.model_path)
     features = list(model.feature_names_in_)
@@ -132,6 +135,7 @@ def run_evaluate(args: argparse.Namespace) -> None:
 
 
 def run_predict(args: argparse.Namespace) -> None:
+    """Score new applicants from a CSV into the output path."""
     model = load_model(args.model_path)
     features = engineer_features(load_features_to_score(args.input_path))[
         list(model.feature_names_in_)
@@ -147,6 +151,7 @@ def run_predict(args: argparse.Namespace) -> None:
 
 
 def run_explain(args: argparse.Namespace) -> None:
+    """Score new applicants with a human-readable reason per decision."""
     model = load_model(args.model_path)
     features = engineer_features(load_features_to_score(args.input_path))[
         list(model.feature_names_in_)
@@ -172,6 +177,7 @@ _STAGE_HANDLERS = {
 
 
 def run_pipeline(args: argparse.Namespace) -> None:
+    """Run the whole pipeline or a single stage, dispatched over the stage-handler registry."""
     stages = PIPELINE_STAGES if args.stage == "all" else (args.stage,)
     for stage in stages:
         print(f"=== {stage} ===")
@@ -179,6 +185,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
 
 
 def _add_pipeline_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the training and run flags shared by the ``train`` and ``run`` parsers."""
     parser.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
     parser.add_argument("--model-name", choices=sorted(MODELS), default=DEFAULT_MODEL_NAME)
     parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
@@ -198,6 +205,7 @@ def _add_pipeline_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the argparse tree for the ``credit-risk`` CLI."""
     parser = argparse.ArgumentParser(
         prog="credit-risk",
         description="Prepare, train, evaluate, apply and explain the loan approval model.",
@@ -262,6 +270,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Silence library warnings, parse arguments, and dispatch to the chosen handler."""
     silence_library_warnings()
     args = build_parser().parse_args()
     args.handler(args)

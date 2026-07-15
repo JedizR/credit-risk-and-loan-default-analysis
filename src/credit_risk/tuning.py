@@ -63,6 +63,7 @@ def tune_model(
 
 
 def tuning_history(study: optuna.Study) -> pd.DataFrame:
+    """The completed trials as a DataFrame (number, value, params, state)."""
     return study.trials_dataframe(attrs=("number", "value", "params", "state"))
 
 
@@ -99,5 +100,6 @@ def plot_param_importances(study: optuna.Study) -> Figure:
 
 
 def best_params(study: optuna.Study, model_name: str = DEFAULT_MODEL_NAME) -> dict[str, Any]:
+    """The study's best hyperparameters, after validating the model name is registered."""
     get_model(model_name)
     return dict(study.best_params)

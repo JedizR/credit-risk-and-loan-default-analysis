@@ -69,6 +69,8 @@ class TrainingOptions:
 
 @dataclass(frozen=True)
 class TrainingOutcome:
+    """What a training run produced: model, metrics, features, params, threshold and figures."""
+
     model: Pipeline
     metrics: dict[str, float]
     features: list[str]
@@ -229,6 +231,7 @@ def write_figures(
 
 
 def write_selection_figure(curve: pd.DataFrame, directory: Path | None = None) -> Path:
+    """Render the feature-selection curve into the reports directory."""
     directory = directory or CONFIG.paths.figures
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "features_selection_curve.png"
