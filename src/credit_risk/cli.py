@@ -61,7 +61,7 @@ def run_train(args: argparse.Namespace) -> None:
     options = TrainingOptions(
         tune=args.tune,
         select_features=args.select_features,
-        remove_outliers=args.remove_outliers,
+        remove_outliers=not args.keep_outliers,
         write_plots=args.plots,
         trials=args.trials,
         figures_dir=args.figures_path,
@@ -183,7 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--select-features", action="store_true", help="keep only the consensus feature set"
     )
     train.add_argument(
-        "--remove-outliers", action="store_true", help="drop consensus outliers from training rows"
+        "--keep-outliers", action="store_true", help="keep consensus outliers in the training rows"
     )
     train.add_argument(
         "--plots", action="store_true", help="write every figure to the reports directory"
