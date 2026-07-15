@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -11,42 +10,8 @@ from optuna.trial import Trial
 
 from credit_risk.config import CONFIG
 from credit_risk.evaluation import cross_validated_score
-from credit_risk.pipeline import DEFAULT_MODEL_NAME, MODEL_BUILDERS, UnknownModelError
-
-SEARCH_SPACES: dict[str, Callable[[Trial], dict[str, Any]]] = {
-    "logistic_regression": lambda trial: {
-        "C": trial.suggest_float("C", 1e-3, 1e2, log=True),
-    },
-    "random_forest": lambda trial: {
-        "n_estimators": trial.suggest_int("n_estimators", 100, 600, step=50),
-        "max_depth": trial.suggest_int("max_depth", 3, 20),
-        "min_samples_leaf": trial.suggest_int("min_samples_leaf", 1, 20),
-        "max_features": trial.suggest_float("max_features", 0.3, 1.0),
-    },
-    "gradient_boosting": lambda trial: {
-        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-        "max_iter": trial.suggest_int("max_iter", 100, 500, step=50),
-        "max_leaf_nodes": trial.suggest_int("max_leaf_nodes", 15, 63),
-        "min_samples_leaf": trial.suggest_int("min_samples_leaf", 5, 50),
-    },
-    "lightgbm": lambda trial: {
-        "n_estimators": trial.suggest_int("n_estimators", 100, 800, step=50),
-        "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.3, log=True),
-        "num_leaves": trial.suggest_int("num_leaves", 15, 127),
-        "max_depth": trial.suggest_int("max_depth", 3, 12),
-        "min_child_samples": trial.suggest_int("min_child_samples", 5, 60),
-        "subsample": trial.suggest_float("subsample", 0.6, 1.0),
-        "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
-        "reg_alpha": trial.suggest_float("reg_alpha", 1e-4, 10.0, log=True),
-        "reg_lambda": trial.suggest_float("reg_lambda", 1e-4, 10.0, log=True),
-    },
-}
-
-
-def suggest_params(trial: Trial, model_name: str) -> dict[str, Any]:
-    if model_name not in SEARCH_SPACES:
-        raise UnknownModelError(model_name)
-    return SEARCH_SPACES[model_name](trial)
+from credit_risk.models import get_model
+from credit_risk.pipeline import DEFAULT_MODEL_NAME
 
 
 def tune_model(
@@ -59,14 +24,29 @@ def tune_model(
 ) -> optuna.Study:
     """Search hyperparameters against cross-validated PR-AUC.
 
-    Every trial is scored by cross-validation *inside* the objective, so the preprocessing is
-    refit on each fold and the holdout is never touched during the search.
+    Every trial is scored by cross-validation *inside* the objective, so the preprocessing is refit
+    on each fold and the holdout is never touched during the search.
+
+    Args:
+        features: The training feature frame.
+        target: The training labels aligned to ``features``.
+        model_name: The registered model to tune.
+        numeric_features: Numeric columns for the preprocessor, or None for the schema default.
+        categorical_features: Categorical columns for the preprocessor, or None for the default.
+        trials: Number of Optuna trials, or None for ``CONFIG.training.optuna_trials``.
+
+    Returns:
+        The completed Optuna study, whose ``best_params`` rebuild the tuned model.
+
+    Raises:
+        UnknownModelError: If ``model_name`` is not registered.
     """
+    model = get_model(model_name)
     trials = trials or CONFIG.training.optuna_trials
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
     def objective(trial: Trial) -> float:
-        params = suggest_params(trial, model_name)
+        params = model.search_space(trial)
         scores = cross_validated_score(
             features, target, model_name, numeric_features, categorical_features, params
         )
@@ -119,6 +99,5 @@ def plot_param_importances(study: optuna.Study) -> Figure:
 
 
 def best_params(study: optuna.Study, model_name: str = DEFAULT_MODEL_NAME) -> dict[str, Any]:
-    if model_name not in MODEL_BUILDERS:
-        raise UnknownModelError(model_name)
+    get_model(model_name)
     return dict(study.best_params)
