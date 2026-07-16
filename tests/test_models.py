@@ -38,3 +38,24 @@ def test_build_estimator_applies_overrides() -> None:
 def test_get_model_rejects_an_unknown_name() -> None:
     with pytest.raises(UnknownModelError, match="neural_net"):
         get_model("neural_net")
+
+
+@pytest.mark.parametrize("name", sorted(MODELS))
+def test_build_returns_an_estimator_with_the_classifier_interface(name: str) -> None:
+    estimator = get_model(name).build()
+    for method in ("fit", "predict", "predict_proba", "get_params", "set_params"):
+        assert callable(getattr(estimator, method, None))
+
+
+def test_build_rejects_a_from_scratch_model_missing_predict_proba() -> None:
+    class BrokenModel(CreditModel):
+        name = "broken"
+
+        def build_estimator(self, **params):  # noqa: ARG002
+            return object()
+
+        def search_space(self, trial):  # noqa: ARG002
+            return {}
+
+    with pytest.raises(TypeError, match="predict_proba"):
+        BrokenModel().build()
