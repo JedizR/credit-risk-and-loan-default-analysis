@@ -1,6 +1,6 @@
 [project]
 name = "credit-risk"
-version = "1.0.0"
+version = "1.0.1"
 description = "Credit risk and loan default analysis for the Practical Machine Learning final project"
 readme = "README.md"
 authors = [
