@@ -1,6 +1,8 @@
-import argparse
 import json
 from pathlib import Path
+from typing import Any
+
+import fire
 
 from credit_risk import silence_library_warnings
 from credit_risk.config import CONFIG
@@ -13,7 +15,6 @@ from credit_risk.data import (
 )
 from credit_risk.explain import decision_reasons
 from credit_risk.features.engineering import engineer_features
-from credit_risk.models import MODELS
 from credit_risk.pipeline import DEFAULT_MODEL_NAME
 from credit_risk.train import (
     load_model,
@@ -35,242 +36,252 @@ DEFAULT_MODEL_PATH = CONFIG.paths.model
 DEFAULT_METRICS_PATH = CONFIG.paths.metrics
 DEFAULT_PREDICTIONS_PATH = CONFIG.paths.predictions
 DEFAULT_REASONS_PATH = Path("out/decisions.csv")
+PIPELINE_STAGES = ("prepare", "preprocess", "train", "evaluate")
 
 
-def _report(metrics: dict[str, float]) -> None:
+def _path(value: Any) -> Path | None:
+    """Normalise a CLI value (Fire passes strings) into a Path, keeping None as None."""
+    return Path(value) if value is not None else None
+
+
+def _report(metrics: dict) -> None:
     print(json.dumps(metrics, indent=2))
 
 
-def run_prepare(_args: argparse.Namespace) -> None:
-    """Repair the raw CSV into the typed parquet and print where it landed."""
-    frame = prepare_dataset()
-    print(f"Prepared {len(frame)} applicants written to {PROCESSED_PARQUET}")
-    print(f"Provenance written to {REGISTRY_JSON}")
+class CreditRisk:
+    """Prepare, train, evaluate, apply and explain the loan-approval model."""
 
+    def prepare(self) -> None:
+        """Repair and convert the raw CSV to a typed parquet dataset."""
+        frame = prepare_dataset()
+        print(f"Prepared {len(frame)} applicants written to {PROCESSED_PARQUET}")
+        print(f"Provenance written to {REGISTRY_JSON}")
 
-def run_preprocess(args: argparse.Namespace) -> None:
-    """Engineer the model-ready parquet, update provenance, and print where it landed."""
-    engineered = write_preprocessed_dataset(path=args.output_path, registry_path=args.registry_path)
-    output = args.output_path or CONFIG.paths.preprocessed_parquet
-    registry = args.registry_path or REGISTRY_JSON
+    def preprocess(self, output_path: Any = None, registry_path: Any = None) -> None:
+        """Engineer the features and save the model-ready dataset.
 
-    print(f"Preprocessed {len(engineered)} applicants into {engineered.shape[1]} columns")
-    print(f"Model-ready dataset written to {output}")
-    print(
-        "Numeric nulls are kept on purpose: the imputer is fitted per fold inside the model "
-        "pipeline, so baking values in here would leak the holdout into training."
-    )
-    print(f"Provenance updated in {registry}")
+        Args:
+            output_path: Where to write the model-ready parquet (default from config).
+            registry_path: Where to update the provenance registry (default from config).
+        """
+        engineered = write_preprocessed_dataset(
+            path=_path(output_path), registry_path=_path(registry_path)
+        )
+        output = _path(output_path) or CONFIG.paths.preprocessed_parquet
+        registry = _path(registry_path) or REGISTRY_JSON
+        print(f"Preprocessed {len(engineered)} applicants into {engineered.shape[1]} columns")
+        print(f"Model-ready dataset written to {output}")
+        print(
+            "Numeric nulls are kept on purpose: the imputer is fitted per fold inside the model "
+            "pipeline, so baking values in here would leak the holdout into training."
+        )
+        print(f"Provenance updated in {registry}")
 
+    def train(
+        self,
+        data: Any = None,
+        model_name: str = DEFAULT_MODEL_NAME,
+        model_path: Any = DEFAULT_MODEL_PATH,
+        metrics_path: Any = DEFAULT_METRICS_PATH,
+        figures_path: Any = None,
+        tune: bool = False,
+        trials: int | None = None,
+        select_features: bool = False,
+        keep_outliers: bool = False,
+        plots: bool = False,
+    ) -> None:
+        """Run the full training pipeline and record a versioned run beside the model.
 
-def run_train(args: argparse.Namespace) -> None:
-    """Train, save the model and metrics, and record a versioned run beside the model.
+        Args:
+            data: Training dataset path; defaults to the prepared dataset.
+            model_name: Registered model to train (lightgbm, logistic_regression, ...).
+            model_path: Where to save the fitted model; version artefacts land beside it.
+            metrics_path: Where to write the holdout metrics JSON.
+            figures_path: Where to write figures when ``plots`` is set.
+            tune: Search hyperparameters with Optuna.
+            trials: Optuna trials when tuning.
+            select_features: Keep only the consensus feature set.
+            keep_outliers: Keep consensus outliers (removal is on by default).
+            plots: Write every figure to the reports directory.
+        """
+        model_path = _path(model_path)
+        metrics_path = _path(metrics_path)
+        frame = load_training_data(_path(data))
+        options = TrainingOptions(
+            tune=tune,
+            select_features=select_features,
+            remove_outliers=not keep_outliers,
+            write_plots=plots,
+            trials=trials,
+            figures_dir=_path(figures_path),
+        )
+        outcome = run_training(frame, model_name, options)
 
-    Version artefacts (manifest, model card, registry) are written to the model path's parent, so a
-    custom ``--model-path`` keeps them alongside the working model.
-    """
-    frame = load_training_data(args.data)
-    options = TrainingOptions(
-        tune=args.tune,
-        select_features=args.select_features,
-        remove_outliers=not args.keep_outliers,
-        write_plots=args.plots,
-        trials=args.trials,
-        figures_dir=args.figures_path,
-    )
-    outcome = run_training(frame, args.model_name, options)
+        save_model(outcome.model, model_path)
+        save_metrics(outcome.metrics, metrics_path)
+        run_dir = model_path.parent
+        record = save_run(
+            outcome.model,
+            self._manifest(outcome, options, model_name),
+            models_dir=run_dir,
+            cards_dir=run_dir / "model_cards",
+            registry_path=run_dir / "registry.json",
+        )
 
-    save_model(outcome.model, args.model_path)
-    save_metrics(outcome.metrics, args.metrics_path)
-    run_dir = args.model_path.parent
-    record = save_run(
-        outcome.model,
-        _manifest_for(outcome, options, args.model_name),
-        models_dir=run_dir,
-        cards_dir=run_dir / "model_cards",
-        registry_path=run_dir / "registry.json",
-    )
+        print(f"Trained {model_name} on {len(frame)} applicants")
+        if outcome.outliers_removed:
+            print(f"Removed {outcome.outliers_removed} outliers from the training rows")
+        print(f"Using {len(outcome.features)} features: {', '.join(outcome.features)}")
+        if outcome.params:
+            print(f"Tuned parameters: {json.dumps(outcome.params)}")
+        print(f"Decision threshold: {outcome.threshold}")
+        print(f"Model written to {model_path}")
+        print(f"Metrics written to {metrics_path}")
+        if outcome.figures:
+            print(f"Wrote {len(outcome.figures)} figures to {outcome.figures[0].parent}")
+        print(f"Recorded run {record.run_id}; model card at {record.card_path}")
+        _report(outcome.metrics)
 
-    print(f"Trained {args.model_name} on {len(frame)} applicants")
-    if outcome.outliers_removed:
-        print(f"Removed {outcome.outliers_removed} outliers from the training rows")
-    print(f"Using {len(outcome.features)} features: {', '.join(outcome.features)}")
-    if outcome.params:
-        print(f"Tuned parameters: {json.dumps(outcome.params)}")
-    print(f"Decision threshold: {outcome.threshold}")
-    print(f"Model written to {args.model_path}")
-    print(f"Metrics written to {args.metrics_path}")
-    if outcome.figures:
-        print(f"Wrote {len(outcome.figures)} figures to {outcome.figures[0].parent}")
-    print(f"Recorded run {record.run_id}; model card at {record.card_path}")
-    _report(outcome.metrics)
+    def run(
+        self,
+        stage: str = "all",
+        data: Any = None,
+        model_name: str = DEFAULT_MODEL_NAME,
+        model_path: Any = DEFAULT_MODEL_PATH,
+        metrics_path: Any = DEFAULT_METRICS_PATH,
+        figures_path: Any = None,
+        tune: bool = False,
+        trials: int | None = None,
+        select_features: bool = False,
+        keep_outliers: bool = False,
+        plots: bool = False,
+        output_path: Any = None,
+        registry_path: Any = None,
+        threshold: float | None = None,
+    ) -> None:
+        """Run the whole pipeline, or a single stage.
 
+        Args:
+            stage: One of all, prepare, preprocess, train, evaluate. 'all' chains them in order.
 
-def _manifest_for(outcome: TrainingOutcome, options: TrainingOptions, model_name: str) -> dict:
-    return build_manifest(
-        model_name=model_name,
-        params=outcome.params,
-        features=outcome.features,
-        threshold=outcome.threshold,
-        metrics=outcome.metrics,
-        options={
-            "tune": options.tune,
-            "select_features": options.select_features,
-            "remove_outliers": options.remove_outliers,
-        },
-    )
+        The remaining arguments are forwarded to the matching stage (for example ``--tune`` and
+        ``--plots`` to train, ``--threshold`` to evaluate).
+        """
+        stage_runners = {
+            "prepare": lambda: self.prepare(),
+            "preprocess": lambda: self.preprocess(output_path, registry_path),
+            "train": lambda: self.train(
+                data,
+                model_name,
+                model_path,
+                metrics_path,
+                figures_path,
+                tune,
+                trials,
+                select_features,
+                keep_outliers,
+                plots,
+            ),
+            "evaluate": lambda: self.evaluate(data, model_path, threshold),
+        }
+        if stage != "all" and stage not in stage_runners:
+            raise ValueError(
+                f"Unknown stage '{stage}'. Choose from: all, {', '.join(PIPELINE_STAGES)}"
+            )
+        for name in PIPELINE_STAGES if stage == "all" else (stage,):
+            print(f"=== {name} ===")
+            stage_runners[name]()
 
+    def evaluate(
+        self, data: Any = None, model_path: Any = DEFAULT_MODEL_PATH, threshold: float | None = None
+    ) -> None:
+        """Score a saved model on the held-out applicants.
 
-def run_evaluate(args: argparse.Namespace) -> None:
-    """Score a saved model on the holdout split and print the metrics."""
-    frame = engineer_features(load_training_data(args.data))
-    model = load_model(args.model_path)
-    features = list(model.feature_names_in_)
-    split = split_holdout(frame, features)
+        Args:
+            data: Dataset to split for the holdout; defaults to the prepared dataset.
+            model_path: The saved model to evaluate.
+            threshold: Decision threshold; defaults to the configured value.
+        """
+        model = load_model(_path(model_path))
+        frame = engineer_features(load_training_data(_path(data)))
+        split = split_holdout(frame, list(model.feature_names_in_))
+        metrics = score_model(model, split.holdout_features, split.holdout_target, threshold)
+        print(f"Evaluated {_path(model_path)} on {len(split.holdout_target)} held-out applicants")
+        _report(metrics)
 
-    metrics = score_model(model, split.holdout_features, split.holdout_target, args.threshold)
+    def predict(
+        self,
+        input_path: Any,
+        output_path: Any = DEFAULT_PREDICTIONS_PATH,
+        model_path: Any = DEFAULT_MODEL_PATH,
+        threshold: float | None = None,
+    ) -> None:
+        """Score new applicants from a CSV.
 
-    print(f"Evaluated {args.model_path} on {len(split.holdout_target)} held-out applicants")
-    _report(metrics)
+        Args:
+            input_path: CSV of applicants to score.
+            output_path: Where to write the predictions CSV.
+            model_path: The saved model to score with.
+            threshold: Decision threshold; defaults to the configured value.
+        """
+        model = load_model(_path(model_path))
+        features = engineer_features(load_features_to_score(_path(input_path)))[
+            list(model.feature_names_in_)
+        ]
+        scored = predict_applicants(model, features, threshold)
+        output_path = _path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        scored.to_csv(output_path, index=False)
+        approved = int(scored["LoanApprovedPrediction"].sum())
+        print(f"Scored {len(scored)} applicants, {approved} predicted approved")
+        print(f"Predictions written to {output_path}")
 
+    def explain(
+        self,
+        input_path: Any,
+        output_path: Any = DEFAULT_REASONS_PATH,
+        model_path: Any = DEFAULT_MODEL_PATH,
+        threshold: float | None = None,
+        limit: int = 100,
+    ) -> None:
+        """Score applicants with a human-readable reason for each decision.
 
-def run_predict(args: argparse.Namespace) -> None:
-    """Score new applicants from a CSV into the output path."""
-    model = load_model(args.model_path)
-    features = engineer_features(load_features_to_score(args.input_path))[
-        list(model.feature_names_in_)
-    ]
+        Args:
+            input_path: CSV of applicants to explain.
+            output_path: Where to write the decisions CSV.
+            model_path: The saved model to use.
+            threshold: Decision threshold; defaults to the configured value.
+            limit: Number of applicants to explain.
+        """
+        model = load_model(_path(model_path))
+        features = engineer_features(load_features_to_score(_path(input_path)))[
+            list(model.feature_names_in_)
+        ].head(limit)
+        decisions = decision_reasons(model, features, threshold)
+        output_path = _path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        decisions.to_csv(output_path, index=False)
+        print(f"Explained {len(decisions)} applicants")
+        print(f"Decisions and reasons written to {output_path}")
+        print(decisions.head(5).to_string())
 
-    scored = predict_applicants(model, features, args.threshold)
-    args.output_path.parent.mkdir(parents=True, exist_ok=True)
-    scored.to_csv(args.output_path, index=False)
-
-    approved = int(scored["LoanApprovedPrediction"].sum())
-    print(f"Scored {len(scored)} applicants, {approved} predicted approved")
-    print(f"Predictions written to {args.output_path}")
-
-
-def run_explain(args: argparse.Namespace) -> None:
-    """Score new applicants with a human-readable reason per decision."""
-    model = load_model(args.model_path)
-    features = engineer_features(load_features_to_score(args.input_path))[
-        list(model.feature_names_in_)
-    ].head(args.limit)
-
-    decisions = decision_reasons(model, features, args.threshold)
-    args.output_path.parent.mkdir(parents=True, exist_ok=True)
-    decisions.to_csv(args.output_path, index=False)
-
-    print(f"Explained {len(decisions)} applicants")
-    print(f"Decisions and reasons written to {args.output_path}")
-    print(decisions.head(5).to_string())
-
-
-PIPELINE_STAGES = ("prepare", "preprocess", "train", "evaluate")
-
-_STAGE_HANDLERS = {
-    "prepare": run_prepare,
-    "preprocess": run_preprocess,
-    "train": run_train,
-    "evaluate": run_evaluate,
-}
-
-
-def run_pipeline(args: argparse.Namespace) -> None:
-    """Run the whole pipeline or a single stage, dispatched over the stage-handler registry."""
-    stages = PIPELINE_STAGES if args.stage == "all" else (args.stage,)
-    for stage in stages:
-        print(f"=== {stage} ===")
-        _STAGE_HANDLERS[stage](args)
-
-
-def _add_pipeline_arguments(parser: argparse.ArgumentParser) -> None:
-    """Add the training and run flags shared by the ``train`` and ``run`` parsers."""
-    parser.add_argument("--data", type=Path, default=None, help="defaults to the prepared dataset")
-    parser.add_argument("--model-name", choices=sorted(MODELS), default=DEFAULT_MODEL_NAME)
-    parser.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
-    parser.add_argument("--metrics-path", type=Path, default=DEFAULT_METRICS_PATH)
-    parser.add_argument("--figures-path", type=Path, default=None)
-    parser.add_argument("--tune", action="store_true", help="search hyperparameters with Optuna")
-    parser.add_argument("--trials", type=int, default=None, help="Optuna trials when tuning")
-    parser.add_argument(
-        "--select-features", action="store_true", help="keep only the consensus feature set"
-    )
-    parser.add_argument(
-        "--keep-outliers", action="store_true", help="keep consensus outliers in the training rows"
-    )
-    parser.add_argument(
-        "--plots", action="store_true", help="write every figure to the reports directory"
-    )
-
-
-def build_parser() -> argparse.ArgumentParser:
-    """Build the argparse tree for the ``credit-risk`` CLI."""
-    parser = argparse.ArgumentParser(
-        prog="credit-risk",
-        description="Prepare, train, evaluate, apply and explain the loan approval model.",
-    )
-    subcommands = parser.add_subparsers(dest="command", required=True)
-
-    prepare = subcommands.add_parser(
-        "prepare", help="Repair and convert the raw CSV to a typed parquet dataset"
-    )
-    prepare.set_defaults(handler=run_prepare)
-
-    preprocess = subcommands.add_parser(
-        "preprocess", help="Engineer the features and save the model-ready dataset"
-    )
-    preprocess.add_argument("--output-path", type=Path, default=None)
-    preprocess.add_argument("--registry-path", type=Path, default=None)
-    preprocess.set_defaults(handler=run_preprocess)
-
-    train = subcommands.add_parser("train", help="Run the full training pipeline")
-    _add_pipeline_arguments(train)
-    train.set_defaults(handler=run_train)
-
-    run = subcommands.add_parser("run", help="Run the whole pipeline, or a single stage")
-    run.add_argument(
-        "--stage",
-        choices=("all", *PIPELINE_STAGES),
-        default="all",
-        help="which stage to run; 'all' chains prepare, preprocess, train and evaluate",
-    )
-    _add_pipeline_arguments(run)
-    run.add_argument("--output-path", type=Path, default=None, help="preprocess output parquet")
-    run.add_argument("--registry-path", type=Path, default=None, help="preprocess provenance path")
-    run.add_argument("--threshold", type=float, default=None, help="evaluate decision threshold")
-    run.set_defaults(handler=run_pipeline)
-
-    evaluate = subcommands.add_parser(
-        "evaluate", help="Score a saved model on the held-out applicants"
-    )
-    evaluate.add_argument("--data", type=Path, default=None)
-    evaluate.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
-    evaluate.add_argument("--threshold", type=float, default=None)
-    evaluate.set_defaults(handler=run_evaluate)
-
-    predict = subcommands.add_parser("predict", help="Score new applicants from a CSV")
-    predict.add_argument("--input-path", type=Path, required=True)
-    predict.add_argument("--output-path", type=Path, default=DEFAULT_PREDICTIONS_PATH)
-    predict.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
-    predict.add_argument("--threshold", type=float, default=None)
-    predict.set_defaults(handler=run_predict)
-
-    explain = subcommands.add_parser(
-        "explain", help="Score applicants with a human-readable reason for each decision"
-    )
-    explain.add_argument("--input-path", type=Path, required=True)
-    explain.add_argument("--output-path", type=Path, default=DEFAULT_REASONS_PATH)
-    explain.add_argument("--model-path", type=Path, default=DEFAULT_MODEL_PATH)
-    explain.add_argument("--threshold", type=float, default=None)
-    explain.add_argument("--limit", type=int, default=100, help="applicants to explain")
-    explain.set_defaults(handler=run_explain)
-
-    return parser
+    @staticmethod
+    def _manifest(outcome: TrainingOutcome, options: TrainingOptions, model_name: str) -> dict:
+        return build_manifest(
+            model_name=model_name,
+            params=outcome.params,
+            features=outcome.features,
+            threshold=outcome.threshold,
+            metrics=outcome.metrics,
+            options={
+                "tune": options.tune,
+                "select_features": options.select_features,
+                "remove_outliers": options.remove_outliers,
+            },
+        )
 
 
 def main() -> None:
-    """Silence library warnings, parse arguments, and dispatch to the chosen handler."""
+    """Silence library warnings, then dispatch the CLI with Fire."""
     silence_library_warnings()
-    args = build_parser().parse_args()
-    args.handler(args)
+    fire.Fire(CreditRisk, name="credit-risk")
