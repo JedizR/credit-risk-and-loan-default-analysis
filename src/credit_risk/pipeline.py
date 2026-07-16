@@ -78,7 +78,7 @@ def build_model(
     Raises:
         UnknownModelError: If ``model_name`` is not registered.
     """
-    classifier = get_model(model_name).build_estimator(**(params or {}))
+    classifier = get_model(model_name).build(**(params or {}))
     return Pipeline(
         [
             (
